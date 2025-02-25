@@ -1,4 +1,6 @@
 import numpy as np
+import matplotlib.pyplot as plt
+
 
 class BaseBackward:
     def __init__(self, *sources):
@@ -13,23 +15,46 @@ class BaseBackward:
 class AddBackward(BaseBackward):
     def __call__(self, upstream_grad):
         if self.sources[0].requires_grad:
-            self.sources[0].grad += upstream_grad
+            expanded_dims = np.where(np.array(self.sources[0].shape)==1)[0] # for broadcasting different shapes
+            if len(expanded_dims)>0:
+                self.sources[0].grad += upstream_grad.mean(axis=tuple(expanded_dims), keepdims=True)
+            else:
+                self.sources[0].grad += upstream_grad
+            self.sources[0].grad.no_grad()
         if self.sources[1].requires_grad:
-            self.sources[1].grad += upstream_grad
+            expanded_dims = np.where(np.array(self.sources[1].shape)==1)[0]
+            if len(expanded_dims)>0:
+                self.sources[1].grad += upstream_grad.mean(axis=tuple(expanded_dims), keepdims=True)
+            else:
+                self.sources[1].grad += upstream_grad
+            self.sources[1].grad.no_grad()
+            
 
 class SubBackward(BaseBackward):
     def __call__(self, upstream_grad):
         if self.sources[0].requires_grad:
-            self.sources[0].grad += upstream_grad
+            expanded_dims = np.where(np.array(self.sources[0].shape)==1)[0] # for broadcasting different shapes
+            if len(expanded_dims)>0:
+                self.sources[0].grad += upstream_grad.mean(axis=tuple(expanded_dims), keepdims=True)
+            else:
+                self.sources[0].grad += upstream_grad
+            self.sources[0].grad.no_grad()
         if self.sources[1].requires_grad:
-            self.sources[1].grad -= upstream_grad
-
+            expanded_dims = np.where(np.array(self.sources[1].shape)==1)[0]
+            if len(expanded_dims)>0:
+                self.sources[1].grad -= upstream_grad.mean(axis=tuple(expanded_dims), keepdims=True)
+            else:
+                self.sources[1].grad -= upstream_grad
+            self.sources[1].grad.no_grad()
+            
 class MulBackward(BaseBackward):
     def __call__(self, upstream_grad):
         if self.sources[0].requires_grad:
             self.sources[0].grad += upstream_grad * self.sources[1].data
+            self.sources[0].grad.no_grad()
         if self.sources[1].requires_grad:
             self.sources[1].grad += upstream_grad * self.sources[0].data
+            self.sources[1].grad.no_grad()
 
 class DivBackward(BaseBackward):
     def __init__(self, source, scalar):
@@ -39,6 +64,7 @@ class DivBackward(BaseBackward):
     def __call__(self, upstream_grad):
         if self.sources[0].requires_grad:
             self.sources[0].grad += upstream_grad * (1 / self.scalar)
+            self.sources[0].grad.no_grad()
 
 
 class SumBackward(BaseBackward):
@@ -53,7 +79,8 @@ class SumBackward(BaseBackward):
             if self.axis is not None:
                 grad_shape = np.array(self.sources[0].shape)
                 grad_shape[self.axis] = 1
-            self.sources[0].grad += upstream_grad.reshape(grad_shape)
+            self.sources[0].grad += upstream_grad.data.reshape(grad_shape)
+            self.sources[0].grad.no_grad()
 
 
 class MeanBackward(BaseBackward):
@@ -71,15 +98,25 @@ class MeanBackward(BaseBackward):
                 grad_shape[self.axis] = 1
             else:
                 scale = np.prod(self.sources[0].shape)
-            self.sources[0].grad += (upstream_grad.reshape(grad_shape) * (1 / scale))
+            self.sources[0].grad += (upstream_grad.data.reshape(grad_shape) * (1 / scale))
+            self.sources[0].grad.no_grad()
 
 
 class MatmulBackward(BaseBackward):
     def __call__(self, upstream_grad):
+        scale = 1
         if self.sources[0].requires_grad:
+            if self.sources[0].name is not None and "Linear_Weight" in self.sources[0].name:
+                scale = self.sources[0].shape[0]
             self.sources[0].grad += upstream_grad @ self.sources[1].transpose(1, 0)
+            self.sources[0].grad.data /= scale
+            self.sources[0].grad.no_grad()
         if self.sources[1].requires_grad:
+            if self.sources[1].name is not None and "Linear_Weight" in self.sources[1].name:
+                scale = self.sources[0].shape[0]
             self.sources[1].grad += self.sources[0].transpose(1, 0) @ upstream_grad
+            self.sources[1].grad.data /= scale
+            self.sources[1].grad.no_grad()
 
 class PowerBackward(BaseBackward):
     def __init__(self, source, power):
@@ -89,7 +126,7 @@ class PowerBackward(BaseBackward):
     def __call__(self, upstream_grad):
         if self.sources[0].requires_grad:
             self.sources[0].grad += upstream_grad * (self.power * np.power(self.sources[0].data, self.power - 1))
-
+            self.sources[0].grad.no_grad()
 
 class TransposeBackward(BaseBackward):
     def __init__(self, source, axes):
@@ -100,11 +137,12 @@ class TransposeBackward(BaseBackward):
     def __call__(self, upstream_grad):
         if self.sources[0].requires_grad:
             self.sources[0].grad += np.transpose(upstream_grad, self.inverse_axes)
+            self.sources[0].grad.no_grad()
 
 
 class Tensor:
     def __init__(self, data, requires_grad=False, name=None):
-        if isinstance(data, (list, tuple)):
+        if isinstance(data, (list, tuple, int, float)):
             data = np.array(data, dtype=np.float32)
         
         self.data = data
@@ -145,7 +183,7 @@ class Tensor:
 
 
     def __matmul__(self, other):
-        assert isinstance(other, Tensor)
+        # assert isinstance(other, Tensor)
         out = Tensor(self.data @ other.data, requires_grad=self.requires_grad or other.requires_grad)
         out._grad_fn = MatmulBackward(self, other)
         out._prev = {self, other}
@@ -186,6 +224,9 @@ class Tensor:
         self._grad_fn = None
         self.requires_grad = False
         self.grad = None
+    
+    def zero_(self):
+        self.data = np.zeros_like(self.data)
 
     def backward(self, grad=None):
         if grad is None:
@@ -197,7 +238,6 @@ class Tensor:
         self.grad += grad
         def traverse(tensor):
             if tensor._grad_fn:
-                print(tensor)
                 tensor._grad_fn(tensor.grad)
                 for prev in tensor._prev:
                     traverse(prev)
@@ -210,8 +250,8 @@ class Tensor:
 
 class Linear:
     def __init__(self, fan_in, fan_out):
-        self.weight = Tensor(np.random.randint(0, 5, (fan_in, fan_out)), requires_grad=True, name="linear weight")
-        self.bias = Tensor(np.zeros((1, fan_out)), requires_grad=True, name = "linear bias")
+        self.weight = Tensor(np.random.randn(fan_in, fan_out), requires_grad=True, name="Linear_Weight")
+        self.bias = Tensor(np.zeros((1, fan_out)), requires_grad=True, name = "Linear_Bias")
 
     def forward(self, x):
         value = x @ self.weight + self.bias
@@ -247,66 +287,121 @@ class Sigmoid:
 
 
 
-# class MSEloss:
-#     def __init__(self):
-#         pass
+class MSELoss:
+    def __init__(self):
+        pass
 
-#     def __call__(self, pred, target):
-#         batch_size = pred.shape
-#         diff_ = (pred - target) ** 2
-#         loss = diff_.sum() / batch_size
+    def __call__(self, pred, target):
+        batch_size = pred.shape[0]
+        diff_ = (pred - target) ** 2
+        loss = diff_.sum() / batch_size
+        return loss
             
     
 
+# sinusoid regression
 
-
-linear1 = Linear(6, 3)
+linear1 = Linear(1, 128)
 sig1 = Sigmoid()
-linear2 = Linear(3, 2)
+linear2 = Linear(128, 1)
+loss_fn = MSELoss()
+
+x = np.linspace(0, 2 * np.pi, 300)
+
+x_eval = x[::3].reshape(-1, 1)
+x_train = np.delete(x, np.arange(0, len(x), 3))
+x_train = x_train.reshape(-1, 1)
+
+y_train = np.sin(x_train)
+
+fig = plt.figure(figsize=(20, 5))
+plt.scatter(x_train, y_train, color="b", marker="o")
+plt.savefig("sin_train_data.png")
+
+x_train = Tensor(x_train)
+y_train = Tensor(y_train)
+print("input_shape : ", x_train.shape, y_train.shape)
+
+def grad_norm(param):
+    print(param.grad.shape, param.grad.data.max(), param.grad.data.min())
+    print("Ufff NAN : ", np.isnan(param.grad.data).any())
+    param.grad.data = np.linalg.norm(param.grad.data, ord=2) * 2.0
 
 
-x = Tensor(np.random.randint(0, 5, (1, 6)), name="input")
-
-print("input : ", x)
-print("linear_1_weight : ", linear1.weight)
-print("linear_1_bias : ", linear2.bias)
+params = [linear1.weight, linear1.bias, linear2.weight, linear2.bias]
+lr = 1e-3
 
 
-print("linear_2_weight : ", linear2.weight)
-print("linear_2_bias : ", linear2.bias)
-
-
-out1 = linear1.forward(x)
+# for _ in range(10000):
+for param in params:
+    param.grad.zero_()
+    # print(param.grad)
+out1 = linear1.forward(x_train)
 out1 = sig1(out1)
 out2 = linear2.forward(out1)
-
-init_grad = Tensor(np.array([1, 2]), name="initial_gradient")
-print("init_grad : ", init_grad)
-
-print("\n\n\n")
-
-
-out2.backward(init_grad)
+loss = loss_fn(out2, y_train)
+# print("loss : ", loss)
+loss.backward()
+for param in params:
+    grad_norm(param)
+    param.data = param.data - lr * param.grad.data
 
 
-print("\n\n\n")
-print("linear 2 weight and bias grad : ")
-print(linear2.weight.grad)
-print(linear2.bias.grad)
+x_eval = Tensor(x_eval)
+print("x_eval shape : ", x_eval.shape)
+
+out1 = linear1.forward(x_eval)
+out1 = sig1(out1)
+y_eval = linear2.forward(out1)
 
 
-print("\n\n\n")
-print("linear 1 weight and bias grad : ")
-print(linear1.weight.grad)
-print(linear1.bias.grad)
+fig = plt.figure(figsize=(20, 5))
+plt.scatter(x_eval.data, y_eval.data, color="b", marker="o")
+plt.savefig("sin_eval_data.png")
 
 
-print("\n\n\n")
-print("linear_1_weight : ", linear1.weight)
-print("linear_1_bias : ", linear2.bias)
 
 
-print("linear_2_weight : ", linear2.weight)
-print("linear_2_bias : ", linear2.bias)
 
 
+# import torch
+# import torch.nn as nn
+
+# linear1 = nn.Linear(1, 128)
+# sig1 = nn.Sigmoid()
+# linear2 = nn.Linear(128, 1)
+# loss_fn = nn.MSELoss()
+
+# x = np.linspace(0, 2 * np.pi, 300, dtype=np.float32)
+# x_eval = x[::3].reshape(-1, 1)
+# x_train = np.delete(x, np.arange(0, len(x), 3)).reshape(-1, 1)
+# y_train = np.sin(x_train)
+
+# fig = plt.figure(figsize=(20, 5))
+# plt.scatter(x_train, y_train, color="b", marker="o")
+# plt.savefig("sin_train_data.png")
+
+# x_train = torch.from_numpy(x_train).float()
+# y_train = torch.from_numpy(y_train).float()
+
+# print("input_shape : ", x_train.shape, y_train.shape, x_train.dtype, y_train.dtype)
+
+# optimizer = torch.optim.SGD([linear1.weight, linear1.bias, linear2.weight, linear2.bias], lr=1e-3)
+
+# for _ in range(10000):
+#     optimizer.zero_grad()
+#     out1 = sig1(linear1(x_train))
+#     out2 = linear2(out1)
+#     loss = loss_fn(out2, y_train)
+#     loss.backward()
+#     optimizer.step()
+
+# x_eval = torch.from_numpy(x_eval).float()
+# print("x_eval shape : ", x_eval.shape)
+
+# with torch.no_grad():
+#     y_eval = linear2(sig1(linear1(x_eval)))
+
+# fig = plt.figure(figsize=(20, 5))
+# plt.scatter(x_eval.numpy(), y_eval.numpy(), color="b", marker="o")
+# plt.savefig("sin_eval_data.png")
