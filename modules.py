@@ -114,19 +114,13 @@ class MeanBackward(BaseBackward):
 
 class MatmulBackward(BaseBackward):
     def __call__(self, upstream_grad):
-        scale = 1
         if self.sources[0].requires_grad:
-            if self.sources[0].name is not None and "Linear_Weight" in self.sources[0].name:
-                scale = self.sources[0].shape[0]
             self.sources[0].grad += upstream_grad @ self.sources[1].transpose(1, 0)
-            self.sources[0].grad.data /= scale
             self.sources[0].grad.no_grad()
         if self.sources[1].requires_grad:
-            if self.sources[1].name is not None and "Linear_Weight" in self.sources[1].name:
-                scale = self.sources[1].shape[1]
             self.sources[1].grad += self.sources[0].transpose(1, 0) @ upstream_grad
-            self.sources[1].grad.data /= scale
             self.sources[1].grad.no_grad()
+
 
 class PowerBackward(BaseBackward):
     def __init__(self, source, power):
@@ -258,7 +252,7 @@ class Tensor:
                 mean_ = tensor.grad.data.mean()
             else:
                 mean_ = None
-            print(tensor.name, tensor.grad, tensor._grad_fn, mean_)
+            # print(tensor.name, tensor.grad, tensor._grad_fn, mean_)
             if tensor._grad_fn:
                 tensor._grad_fn(tensor.grad)
                 for prev in tensor._prev:
@@ -410,29 +404,51 @@ class CrossEntropyLoss:
 
 
 
-# sinusoid regression
+# real data test
+from keras.datasets import fashion_mnist
+(x_train, y_train), (x_test, y_test) = fashion_mnist.load_data()
+print(x_train.shape)
+print(y_train.shape)
+print(x_test.shape)
+print(y_test.shape)
 
 
+B, _, _ = x_train.shape
+x_train = x_train.reshape(B, -1)
 
-linear1 = Linear(8, 16)
-sig1 = Tanh()
-linear2 = Linear(16, 2)
+x_train = x_train[:2]
+y_train = y_train[:2]
+
+print(x_train)
+print(y_train)
+
+# import code; code.interact(local=locals())
+# x_test = x_test.reshape(, -1)
+
+
+linear1 = Linear(784, 1024)
+non_linearity1 = Tanh()
+
+linear2 = Linear(1024, 256)
+non_linearity2 = Tanh()
+
+linear3 = Linear(256, 10)
 loss_fn = CrossEntropyLoss()
 
-x = np.zeros((4, 8))
-indices = np.random.choice(x.size, 16, replace=False)
-x.flat[indices]=1
-y = np.zeros((4))
-y_indices = np.any(x[:, :4]==1, axis=1)
+# x = np.zeros((500, 16))
+# indices = np.random.choice(x.size, 1000, replace=False)
+# x.flat[indices]=1
+# y = np.zeros((500))
+# y_indices = np.any(x[:, :8]==1, axis=1)
 
-y[y_indices] = 1
+# y[y_indices] = 1
 
-x_eval = x[::3, :]
-y_eval = y[::3]
-x_train = np.delete(x, np.arange(0, len(x), 3), axis=0)
-y_train = np.delete(y, np.arange(0, len(y), 3))
+# x_eval = x[::3, :]
+# y_eval = y[::3]
+# x_train = np.delete(x, np.arange(0, len(x), 3), axis=0)
+# y_train = np.delete(y, np.arange(0, len(y), 3))
 
-print(x_train.shape, y_train.shape, x_eval.shape, y_eval.shape)
+print(x_train.shape, y_train.shape, x_test.shape, y_test.shape)
 
 x_train = Tensor(x_train).float()
 y_train = Tensor(y_train).long()
@@ -448,16 +464,19 @@ params = [linear1.weight, linear1.bias, linear2.weight, linear2.bias]
 lr = 1e-3
 
 
-for i in range(5):
+for i in range(10000):
     # print(f"\n\nstep : {i}")
     start_time = time.time()
     for param in params:
         param.grad.zero_()
         # print(param.grad)
-    out1 = linear1.forward(x_train)
-    out1 = sig1(out1)
-    out2 = linear2.forward(out1)
-    loss = loss_fn(out2, y_train)
+    out = linear1.forward(x_train)
+    out = non_linearity1(out)
+    out = linear2.forward(out)
+    out = non_linearity2(out)
+    out = linear3.forward(out)
+    
+    loss = loss_fn(out, y_train)
         
     # print("linear1 weight grad mean : ", linear1.weight.grad)
     # print("linear2 weight grad mean : ", linear2.bias.grad.mean())
@@ -474,23 +493,23 @@ for i in range(5):
     end_time = time.time()
     throughput = 100/(end_time - start_time)
         
-    # if i % 100 == 0:
-    print(f"\n\nstep : {i} | loss : {loss_data} | throughput : {throughput}")
+    if i % 1000 == 0:
+        print(f"\n\nstep : {i} | loss : {loss_data} | throughput : {throughput}")
 
-print("x_eval shape : ", x_eval.shape)
+# print("x_eval shape : ", x_test.shape)
 
-print("linear 1 weight shape : ", linear1.weight.shape)
-x_eval = Tensor(x_eval).float()
-out1 = linear1.forward(x_eval)
-out1 = sig1(out1)
-eval_out = linear2.forward(out1)
-pred = np.argmax(eval_out.data, axis=1)
-print("pred : ", pred)
-print("target : ", y_eval)
-print(pred.shape, y_eval.shape)
+# print("linear 1 weight shape : ", linear1.weight.shape)
+# x_eval = Tensor(x_test).float()
+# out1 = linear1.forward(x_eval)
+# out1 = sig1(out1)
+# eval_out = linear2.forward(out1)
+# pred = np.argmax(eval_out.data, axis=1)
+# print("pred : ", pred)
+# print("target : ", y_test)
+# print(pred.shape, y_test.shape)
 
-acc = (pred==y_eval).sum() / len(pred)
-print("accuracy : ", acc)
+# acc = (pred==y_test).sum() / len(pred)
+# print("accuracy : ", acc)
 
 
 
