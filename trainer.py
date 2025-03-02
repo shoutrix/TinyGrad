@@ -77,9 +77,9 @@ class Trainer:
     def __init__(self, args):
         self.args = args
 
-        wandb.init(project=args.wandb_project, entity=args.wandb_entity, config=vars(args))
+        # wandb.init(project=args.wandb_project, entity=args.wandb_entity, config=vars(args))
 
-        self.trainset, self.validset, self.evalset = load_data()
+        self.trainset, self.validset, self.evalset = load_data(args.dataset)
 
         self.train_loader = FashionMnistDataloader(self.trainset, batch_size=args.batch_size, shuffle=True)
         self.valid_loader = FashionMnistDataloader(self.validset, batch_size=args.batch_size, shuffle=False)
@@ -125,7 +125,7 @@ class Trainer:
             avg_acc = total_acc / len(self.train_loader)
             print(f"Epoch {epoch+1}: Loss={avg_loss:.4f}, Accuracy={avg_acc:.4f}")
 
-            wandb.log({"train_loss": avg_loss, "train_accuracy": avg_acc})
+            # wandb.log({"train_loss": avg_loss, "train_accuracy": avg_acc})
 
     def validate(self):
         total_loss, total_acc = 0, 0
@@ -137,44 +137,4 @@ class Trainer:
         avg_loss = total_loss / len(self.valid_loader)
         avg_acc = total_acc / len(self.valid_loader)
         print(f"Validation: Loss={avg_loss:.4f}, Accuracy={avg_acc:.4f}")
-        wandb.log({"val_loss": avg_loss, "val_accuracy": avg_acc})
-
-
-# Argument Parser
-def parse_args():
-    parser = argparse.ArgumentParser(description="Trainer Script")
-
-    # Weights & Biases
-    parser.add_argument("-wp", "--wandb_project", type=str, required=True, help="WandB project name")
-    parser.add_argument("-we", "--wandb_entity", type=str, required=True, help="WandB entity")
-
-    # Dataset
-    parser.add_argument("-d", "--dataset", type=str, choices=["mnist", "fashion_mnist"], required=True)
-
-    # Training Config
-    parser.add_argument("-e", "--epochs", type=int, default=1, help="Number of epochs")
-    parser.add_argument("-b", "--batch_size", type=int, default=4, help="Batch size")
-    parser.add_argument("-l", "--loss", type=str, choices=["mean_squared_error", "cross_entropy"], required=True)
-    parser.add_argument("-o", "--optimizer", type=str, choices=["sgd", "momentum", "nag", "rmsprop", "adam", "nadam"], required=True)
-    parser.add_argument("-lr", "--learning_rate", type=float, default=0.1, help="Learning rate")
-    parser.add_argument("-m", "--momentum", type=float, default=0.5, help="Momentum (for momentum-based optimizers)")
-    parser.add_argument("-beta", "--beta", type=float, default=0.5, help="Beta (for RMSprop)")
-    parser.add_argument("-beta1", "--beta1", type=float, default=0.5, help="Beta1 (for Adam/Nadam)")
-    parser.add_argument("-beta2", "--beta2", type=float, default=0.5, help="Beta2 (for Adam/Nadam)")
-    parser.add_argument("-eps", "--epsilon", type=float, default=1e-6, help="Epsilon for numerical stability")
-    parser.add_argument("-w_d", "--weight_decay", type=float, default=0.0, help="Weight decay (L2 regularization)")
-
-    # Model Config
-    parser.add_argument("-w_i", "--weight_init", type=str, choices=["random", "Xavier"], default="random", help="Weight initialization method")
-    parser.add_argument("-nhl", "--num_layers", type=int, default=1, help="Number of hidden layers")
-    parser.add_argument("-sz", "--hidden_size", type=int, default=4, help="Hidden layer size")
-    parser.add_argument("-a", "--activation", type=str, choices=["identity", "sigmoid", "tanh", "ReLU"], required=True)
-
-    return parser.parse_args()
-
-
-if __name__ == "__main__":
-    args = parse_args()
-    trainer = Trainer(args)
-    trainer.train()
-    trainer.validate()
+        # wandb.log({"val_loss": avg_loss, "val_accuracy": avg_acc})
