@@ -18,53 +18,67 @@ class BaseBackward:
 
     def __call__(self, upstream_grad):
         raise NotImplementedError("Not Implemented")
+    
+    def validate_grad(self):
+        for source in self.sources:
+            if isinstance(source, Tensor) and source.grad is None and source.requires_grad:
+                source.grad = Tensor(np.zeros_like(source.data))
 
 class AddBackward(BaseBackward):
     def __call__(self, upstream_grad):
+        self.validate_grad()
         
         if self.sources[0].requires_grad:
-            expanded_dims = np.where(np.array(self.sources[0].shape)==1)[0] # for broadcasting different shapes(mostly for the bias)
-            if len(expanded_dims)>0:
-                self.sources[0].grad += upstream_grad.sum(axis=tuple(expanded_dims), keepdims=True)
+            expanded_dims = np.where(np.array(self.sources[0].shape) == 1)[0]  # for broadcasting
+            if len(expanded_dims) > 0:
+                np.add.at(self.sources[0].grad.data, slice(None), upstream_grad.sum(axis=tuple(expanded_dims), keepdims=True).data)
             else:
-                self.sources[0].grad += upstream_grad
-            self.sources[0].grad.no_grad()
+                np.add.at(self.sources[0].grad.data, slice(None), upstream_grad.data)
+        
         if self.sources[1].requires_grad:
-            # print("upstream grad : ", upstream_grad)
-            expanded_dims = np.where(np.array(self.sources[1].shape)==1)[0]
-            if len(expanded_dims)>0:
-                self.sources[1].grad += upstream_grad.sum(axis=tuple(expanded_dims), keepdims=True)
+            expanded_dims = np.where(np.array(self.sources[1].shape) == 1)[0]
+            if len(expanded_dims) > 0:
+                np.add.at(self.sources[1].grad.data, slice(None), upstream_grad.sum(axis=tuple(expanded_dims), keepdims=True).data)
             else:
-                self.sources[1].grad += upstream_grad
-            self.sources[1].grad.no_grad()
+                np.add.at(self.sources[1].grad.data, slice(None), upstream_grad.data)
 
-            
 
 class SubBackward(BaseBackward):
     def __call__(self, upstream_grad):
+        self.validate_grad()
+        
         if self.sources[0].requires_grad:
-            expanded_dims = np.where(np.array(self.sources[0].shape)==1)[0] # for broadcasting different shapes
-            if len(expanded_dims)>0:
-                self.sources[0].grad += upstream_grad.sum(axis=tuple(expanded_dims), keepdims=True)
+            expanded_dims = np.where(np.array(self.sources[0].shape) == 1)[0]
+            if len(expanded_dims) > 0:
+                np.add.at(self.sources[0].grad.data, slice(None), upstream_grad.sum(axis=tuple(expanded_dims), keepdims=True).data)
             else:
-                self.sources[0].grad += upstream_grad
-            self.sources[0].grad.no_grad()
+                np.add.at(self.sources[0].grad.data, slice(None), upstream_grad.data)
+        
         if self.sources[1].requires_grad:
-            expanded_dims = np.where(np.array(self.sources[1].shape)==1)[0]
-            if len(expanded_dims)>0:
-                self.sources[1].grad -= upstream_grad.sum(axis=tuple(expanded_dims), keepdims=True)
+            expanded_dims = np.where(np.array(self.sources[1].shape) == 1)[0]
+            if len(expanded_dims) > 0:
+                np.add.at(self.sources[1].grad.data, slice(None), -upstream_grad.sum(axis=tuple(expanded_dims), keepdims=True).data)
             else:
-                self.sources[1].grad -= upstream_grad
-            self.sources[1].grad.no_grad()
+                np.add.at(self.sources[1].grad.data, slice(None), -upstream_grad.data)
+
             
 class MulBackward(BaseBackward):
     def __call__(self, upstream_grad):
+        self.validate_grad()
+        
         if self.sources[0].requires_grad:
-            self.sources[0].grad += upstream_grad * self.sources[1].data
-            self.sources[0].grad.no_grad()
+            expanded_dims = np.where(np.array(self.sources[0].shape) == 1)[0]
+            if len(expanded_dims) > 0:
+                np.add.at(self.sources[0].grad.data, slice(None), (upstream_grad * self.sources[1]).sum(axis=tuple(expanded_dims), keepdims=True).data)
+            else:
+                np.add.at(self.sources[0].grad.data, slice(None), (upstream_grad * self.sources[1]).data)
+
         if self.sources[1].requires_grad:
-            self.sources[1].grad += upstream_grad * self.sources[0].data
-            self.sources[1].grad.no_grad()
+            expanded_dims = np.where(np.array(self.sources[1].shape) == 1)[0]
+            if len(expanded_dims) > 0:np.add.at(self.sources[1].grad.data, slice(None), (upstream_grad * self.sources[0]).sum(axis=tuple(expanded_dims), keepdims=True).data)
+            else:
+                np.add.at(self.sources[1].grad.data, slice(None), (upstream_grad * self.sources[0]).data)
+
 
 class DivBackward(BaseBackward):
     def __init__(self, source, scalar):
@@ -72,10 +86,9 @@ class DivBackward(BaseBackward):
         self.scalar = scalar
 
     def __call__(self, upstream_grad):
+        self.validate_grad()
         if self.sources[0].requires_grad:
-            self.sources[0].grad += upstream_grad * (1 / self.scalar)
-            self.sources[0].grad.no_grad()
-
+            np.add.at(self.sources[0].grad.data, slice(None), (upstream_grad * (1 / self.scalar)).data)
 
 class SumBackward(BaseBackward):
     def __init__(self, source, axis=None, keepdims=False):
@@ -84,14 +97,13 @@ class SumBackward(BaseBackward):
         self.keepdims = keepdims
 
     def __call__(self, upstream_grad):
+        self.validate_grad()
         if self.sources[0].requires_grad:
-            grad_shape = np.ones_like(self.sources[0].shape)
+            grad_shape = np.ones_like(self.sources[0].data.shape)
             if self.axis is not None:
-                grad_shape = np.array(self.sources[0].shape)
+                grad_shape = np.array(self.sources[0].data.shape)
                 grad_shape[self.axis] = 1
-            self.sources[0].grad += upstream_grad.data.reshape(grad_shape)
-            self.sources[0].grad.no_grad()
-
+            np.add.at(self.sources[0].grad.data, slice(None), upstream_grad.data.reshape(grad_shape))
 
 class MeanBackward(BaseBackward):
     def __init__(self, source, axis=None, keepdims=False):
@@ -100,26 +112,28 @@ class MeanBackward(BaseBackward):
         self.keepdims = keepdims
 
     def __call__(self, upstream_grad):
+        self.validate_grad()
         if self.sources[0].requires_grad:
-            grad_shape = np.ones_like(self.sources[0].shape)
+            grad_shape = np.ones_like(self.sources[0].data.shape)
             if self.axis is not None:
-                scale = self.sources[0].shape[self.axis]
-                grad_shape = np.array(self.sources[0].shape)
-                grad_shape[self.axis] = 1
+                scale = np.prod([self.sources[0].data.shape[ax] for ax in np.atleast_1d(self.axis)])
+                grad_shape = np.array(self.sources[0].data.shape)
+                grad_shape[np.atleast_1d(self.axis)] = 1
             else:
-                scale = np.prod(self.sources[0].shape)
-            self.sources[0].grad += (upstream_grad.data.reshape(grad_shape) * (1 / scale))
-            self.sources[0].grad.no_grad()
+                scale = np.prod(self.sources[0].data.shape)
+            np.add.at(self.sources[0].grad.data, slice(None), (upstream_grad.data.reshape(grad_shape) * (1 / scale)))
+
 
 
 class MatmulBackward(BaseBackward):
     def __call__(self, upstream_grad):
+        self.validate_grad()
+        
         if self.sources[0].requires_grad:
-            self.sources[0].grad += upstream_grad @ self.sources[1].transpose(1, 0)
-            self.sources[0].grad.no_grad()
+            np.add.at(self.sources[0].grad.data, slice(None), (upstream_grad @ self.sources[1].transpose(1, 0)).data)
+        
         if self.sources[1].requires_grad:
-            self.sources[1].grad += self.sources[0].transpose(1, 0) @ upstream_grad
-            self.sources[1].grad.no_grad()
+            np.add.at(self.sources[1].grad.data, slice(None), (self.sources[0].transpose(1, 0) @ upstream_grad).data)
 
 
 class PowerBackward(BaseBackward):
@@ -128,20 +142,24 @@ class PowerBackward(BaseBackward):
         self.power = power
 
     def __call__(self, upstream_grad):
+        self.validate_grad()
         if self.sources[0].requires_grad:
-            self.sources[0].grad += upstream_grad * (self.power * np.power(self.sources[0].data, self.power - 1))
-            self.sources[0].grad.no_grad()
+            grad_value = upstream_grad.data * (self.power * np.power(self.sources[0].data, self.power - 1))
+            np.add.at(self.sources[0].grad.data, slice(None), grad_value)
+
 
 class TransposeBackward(BaseBackward):
-    def __init__(self, source, axes):
+    def __init__(self, source, axes=None):
         super().__init__(source)
         self.axes = axes
-        self.inverse_axes = np.argsort(axes)
+        self.inverse_axes = np.argsort(axes) if axes is not None else None
 
     def __call__(self, upstream_grad):
+        self.validate_grad()
         if self.sources[0].requires_grad:
-            self.sources[0].grad += np.transpose(upstream_grad, self.inverse_axes)
-            self.sources[0].grad.no_grad()
+            grad_value = np.transpose(upstream_grad.data, self.inverse_axes)
+            np.add.at(self.sources[0].grad.data, slice(None), grad_value)
+
 
 
 class Tensor:
@@ -152,7 +170,7 @@ class Tensor:
         self.data = data
         self.shape = data.shape
         self.requires_grad = requires_grad
-        self.grad = Tensor(np.zeros_like(data)) if requires_grad else None
+        self.grad = None
         self._grad_fn = None
         self._prev = set()
         self.name = name
@@ -238,27 +256,33 @@ class Tensor:
             raise ValueError("Only a single-element tensor can be converted to a Python scalar.")
         return self.data
 
-
+        
     def backward(self, grad=None):
+        
         if grad is None:
             grad = np.ones_like(self.data)
-
-        if self.grad is None:
+        
+        if self.grad is None: # for grad accumulation
             self.grad = np.zeros_like(self.data)
         
         self.grad += grad
-        def traverse(tensor):
-            if tensor.grad is not None:
-                mean_ = tensor.grad.data.mean()
-            else:
-                mean_ = None
-            # print(tensor.name, tensor.grad, tensor._grad_fn, mean_)
-            if tensor._grad_fn:
-                tensor._grad_fn(tensor.grad)
-                for prev in tensor._prev:
-                    traverse(prev)
 
-        traverse(self)
+        stack = []
+        visited = set()
+        def build_topo_order(tensor):
+            if tensor in visited:
+                return
+            visited.add(tensor)
+            for prev in tensor._prev:
+                build_topo_order(prev)
+            stack.append(tensor)
+                
+        build_topo_order(self)
+            
+        for tensor in reversed(stack):
+            if tensor.grad is not None and tensor._grad_fn:
+                tensor._grad_fn(tensor.grad)
+                
         
     def float(self):
         self.data = self.data.astype(np.float32)
@@ -333,8 +357,6 @@ class TanhBackward:
 
     def __call__(self, upstream_grad):
         local_grad = 1 - np.tanh(self.x.data)**2
-        # print("sigmoid backward upstream grad : ", upstream_grad.shape)
-        # print("sigmoid backward local grad : ", local_grad.shape)
         self.x.grad = upstream_grad * local_grad
 
 
@@ -376,20 +398,26 @@ class MSELoss:
             
 class CrossEntropyLossBackward(BaseBackward):
     def __call__(self, upstream_grad):
+        self.validate_grad()
+        
         pred = self.sources[0]
         target = self.sources[1]   
         prob = self.sources[2]   
-        
-        upstream_grad /= pred.shape[0]
-        pred_grad = prob
+
+        scaled_upstream_grad = upstream_grad / pred.shape[0]
+
+        pred_grad = prob.copy()
         pred_grad[np.arange(pred.shape[0]), target.data] -= 1
-        pred.grad += Tensor(pred_grad)*upstream_grad
-        pred.grad.no_grad()
+        np.add.at(pred.grad.data, slice(None), pred_grad * scaled_upstream_grad)
+
 
 
 class CrossEntropyLoss:
     @staticmethod
-    def __call__(pred, target):
+    def __call__(pred, target):  
+        
+        # print("pred : ", pred)
+              
         exp_ = np.exp(pred.data)
         prob = exp_ / exp_.sum(axis=1, keepdims=True)
         
@@ -416,8 +444,8 @@ print(y_test.shape)
 B, _, _ = x_train.shape
 x_train = x_train.reshape(B, -1)
 
-x_train = x_train[:2]
-y_train = y_train[:2]
+x_train = x_train[:100]
+y_train = y_train[:100]
 
 print(x_train)
 print(y_train)
@@ -464,11 +492,13 @@ params = [linear1.weight, linear1.bias, linear2.weight, linear2.bias]
 lr = 1e-3
 
 
-for i in range(10000):
+for i in range(1000):
     # print(f"\n\nstep : {i}")
     start_time = time.time()
     for param in params:
-        param.grad.zero_()
+        # print(param)
+        if param.grad is not None:
+            param.grad.zero_()
         # print(param.grad)
     out = linear1.forward(x_train)
     out = non_linearity1(out)
@@ -493,7 +523,7 @@ for i in range(10000):
     end_time = time.time()
     throughput = 100/(end_time - start_time)
         
-    if i % 1000 == 0:
+    if i % 100 == 0:
         print(f"\n\nstep : {i} | loss : {loss_data} | throughput : {throughput}")
 
 # print("x_eval shape : ", x_test.shape)
