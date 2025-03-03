@@ -279,6 +279,7 @@ class Tensor:
             
         for tensor in reversed(stack):
             if tensor.grad is not None and tensor._grad_fn:
+                # print(tensor.shape, tensor._grad_fn)
                 tensor._grad_fn(tensor.grad)
                 
         

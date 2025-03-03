@@ -1,7 +1,22 @@
 import numpy as np
 from tensor import Tensor, BaseBackward
 
+
+def add_nonlinearity(name):
+    assert name in ["sigmoid", "tanh", "ReLU"]
+    if name == "sigmoid":
+        return Sigmoid()
+    elif name == "tanh":
+        return Tanh()
+    elif name == "ReLU":
+        return ReLU()
+
+
 class init:
+    @staticmethod
+    def random_(tensor):
+        tensor.data[:] = np.random.randn(*tensor.data.shape)
+        
     @staticmethod
     def uniform_(tensor, a=0.0, b=1.0):
         tensor.data[:] = np.random.uniform(a, b, tensor.data.shape)
@@ -15,25 +30,39 @@ class init:
         bound = np.sqrt(6 / mode)
         tensor.data[:] = np.random.uniform(-bound, bound, tensor.data.shape)
 
+    @staticmethod
+    def xavier_uniform_(tensor):
+        print("xavier init")
+        fan_in, fan_out = tensor.data.shape
+        bound = np.sqrt(6 / (fan_in + fan_out))
+        tensor.data[:] = np.random.uniform(-bound, bound, tensor.data.shape)
+
+
 
 class Linear:
-    def __init__(self, fan_in, fan_out):
+    def __init__(self, fan_in, fan_out, weight_init):
         self.weight = Tensor(np.empty((fan_in, fan_out)), requires_grad=True, name="Linear_Weight")
         self.bias = Tensor(np.empty((1, fan_out)), requires_grad=True, name="Linear_Bias")
-        self.init_params(fan_in)
-        self.parameters = [self.weight, self.bias]
+        self.fan_in = fan_in
+        self.fan_out = fan_out
+        self.weight_init = weight_init
+        self.init_params()
 
-    def init_params(self, fan_in):
-        init.kaiming_uniform_(self.weight, mode=fan_in)
+    def init_params(self):
+        if self.weight_init == "random":
+            init.random_(self.weight)
+        elif self.weight_init == "Xavier":
+            init.xavier_uniform_(self.weight)
+        elif self.weight_init == "kaiming":
+            init.kaiming_uniform_(self.weight, mode=self.fan_out)
         init.zeros_(self.bias)
 
-    def forward(self, x):
+    def __call__(self, x):
         value = x @ self.weight + self.bias
-        # print(f"linear out: ", value)
         return value
 
     def __repr__(self):
-        return f"Linear(weight={self.weight}, bias={self.bias})"
+        return f"Linear(fan_in={self.fan_in}, fan_out={self.fan_out})"
 
 class SigmoidBackward:
     def __init__(self, x):
@@ -58,6 +87,32 @@ class Sigmoid:
             out._grad_fn = SigmoidBackward(x)
             out._prev = {x}
         return out
+
+class ReLUBackward:
+    def __init__(self, x):
+        self.x = x
+        
+    def __repr__(self):
+        return "<ReLUBackward>"
+
+    def __call__(self, upstream_grad):
+        local_grad = (self.x.data > 0).astype(self.x.data.dtype)
+        self.x.grad = upstream_grad * local_grad
+
+
+class ReLU:
+    def __init__(self):
+        self.cache = None
+    
+    def __call__(self, x):
+        value = np.maximum(0, x.data)
+        out = Tensor(value, requires_grad=x.requires_grad)
+        if x.requires_grad:
+            out._grad_fn = ReLUBackward(x)
+            out._prev = {x}
+        return out
+        
+
 
 class TanhBackward:
     def __init__(self, x):

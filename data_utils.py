@@ -1,10 +1,28 @@
+import numpy as np
+from tensorflow.keras.datasets import fashion_mnist, mnist  # Ensure correct import
+from tensor import Tensor
 
-def load_data():
-    (x_train, y_train), (x_test, y_test) = fashion_mnist.load_data()
+
+def load_data(name):
+    
+    if name == "mnist":
+        (x_train, y_train), (x_test, y_test) = mnist.load_data()
+    elif name == "fashion_mnist":
+        (x_train, y_train), (x_test, y_test) = fashion_mnist.load_data()
+    else:
+        raise ValueError(f"dataset : {name} is not supported !!")
+    
+    
+    # x_train = x_train[:100]
+    # y_train = y_train[:100]
+    
+    # print(x_train)
+    # print(y_train)
     
     indices = np.arange(x_train.shape[0])
     np.random.shuffle(indices)
     x_train, y_train = x_train[indices], y_train[indices]
+    # x_valid, y_valid = x_train, y_train
 
     n_valid_samples = int(np.ceil(x_train.shape[0] * 0.1))
 
@@ -52,6 +70,7 @@ class FashionMnistDataloader:
 
     def __iter__(self):
         self.current_batch = 0
+        print(f"Initialized dataloader with {len(self.batches)} batches")
         return self
 
     def __next__(self):
