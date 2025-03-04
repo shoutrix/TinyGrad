@@ -163,7 +163,8 @@ class CrossEntropyLossBackward(BaseBackward):
 class CrossEntropyLoss:
     @staticmethod
     def __call__(pred, target):  
-                      
+
+        # print(pred)    
         exp_ = np.exp(pred.data)
         # print("exp : ", exp_)
         prob = exp_ / exp_.sum(axis=1, keepdims=True)
