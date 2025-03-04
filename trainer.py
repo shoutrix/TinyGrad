@@ -6,8 +6,9 @@ from optimizers import SGD, RMSprop, Adam, NAdam
 from dataclasses import dataclass
 from typing import List, Optional
 import wandb
+import os
 
-
+os.environ["OMP_NUM_THREADS"] = "4"
 @dataclass
 class Config:
     n_layers: int
@@ -57,6 +58,7 @@ class NN:
         
     
     def forward(self, x, y):
+        # print(x.data.mean(), x.data.std(), x.data.max(), x.data.min(), np.linalg.norm(x.data))
         for name, mod in self.modules.items():
             x = mod(x)
         loss, acc = self.get_loss_and_accuracy(x, y)
@@ -71,18 +73,11 @@ class NN:
 
 
 class Trainer:
-    def __init__(self, args):
+    def __init__(self, args, logging):
         self.args = args
-
-        if args.wandb_entity is not None and args.wandb_project is not None:
-            self.logging = True
-            wandb.init(project=f"{args.wandb_project}_{args.dataset}", 
-                                entity=args.wandb_entity, 
-                                name=f"batch{args.batch_size}_optim{args.optimizer}_init{args.weight_init}_layers{args.num_layers}_hidden{args.hidden_size}_activation{args.activation}",
-                                config=vars(args))
-        else:
-            self.logging = False
-
+        self.logging = logging
+        if self.logging:
+            print("logging to Wandb !!")
         self.trainset, self.validset, self.evalset, n_classes, flattened_dim = load_data(args.dataset)
 
         self.train_loader = FashionMnistDataloader(self.trainset, batch_size=args.batch_size, shuffle=True)
@@ -150,6 +145,3 @@ class Trainer:
             print(f"Validation: Loss={valid_avg_loss:.4f}, Accuracy={valid_avg_acc:.4f}")
             if self.logging:
                 wandb.log({"val_loss": avg_loss, "val_accuracy": avg_acc})
-            # break   
-        if self.logging:
-            wandb.finish()
