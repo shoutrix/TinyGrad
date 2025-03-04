@@ -28,13 +28,14 @@ class init:
     @staticmethod
     def kaiming_uniform_(tensor, mode):
         bound = np.sqrt(6 / mode)
+        print(f"Initializing weights from a uniform dist with bound : {-bound}, {bound}")
         tensor.data[:] = np.random.uniform(-bound, bound, tensor.data.shape)
 
     @staticmethod
     def xavier_uniform_(tensor):
-        print("xavier init")
         fan_in, fan_out = tensor.data.shape
         bound = np.sqrt(6 / (fan_in + fan_out))
+        print(f"Initializing weights from a uniform dist with bound : {-bound}, {bound}")
         tensor.data[:] = np.random.uniform(-bound, bound, tensor.data.shape)
 
 
@@ -164,6 +165,7 @@ class CrossEntropyLoss:
     def __call__(pred, target):  
                       
         exp_ = np.exp(pred.data)
+        # print("exp : ", exp_)
         prob = exp_ / exp_.sum(axis=1, keepdims=True)
         
         prob_filtered = prob[np.arange(target.shape[0]), target.data]

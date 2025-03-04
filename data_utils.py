@@ -1,6 +1,7 @@
 import numpy as np
-from tensorflow.keras.datasets import fashion_mnist, mnist  # Ensure correct import
+from tensorflow.keras.datasets import fashion_mnist, mnist
 from tensor import Tensor
+import random
 
 
 def load_data(name):
@@ -13,16 +14,13 @@ def load_data(name):
         raise ValueError(f"dataset : {name} is not supported !!")
     
     
-    # x_train = x_train[:100]
-    # y_train = y_train[:100]
-    
-    # print(x_train)
-    # print(y_train)
+    n_classes = int(np.unique(y_train).size)
+    print("n classes : ", n_classes)
+    flattened_dim = np.prod(x_train.shape[1:])
     
     indices = np.arange(x_train.shape[0])
     np.random.shuffle(indices)
     x_train, y_train = x_train[indices], y_train[indices]
-    # x_valid, y_valid = x_train, y_train
 
     n_valid_samples = int(np.ceil(x_train.shape[0] * 0.1))
 
@@ -33,7 +31,7 @@ def load_data(name):
     validset = FashionMnistDataset(x_valid, y_valid)
     evalset = FashionMnistDataset(x_test, y_test)
 
-    return trainset, validset, evalset
+    return trainset, validset, evalset, n_classes, flattened_dim
 
 
  
@@ -58,18 +56,19 @@ class FashionMnistDataloader:
     def __init__(self, dataset, batch_size, shuffle=True):
         self.dataset = dataset
         self.batch_size = batch_size
+        self.shuffle = True
 
-        if shuffle:
-            dataset.shuffle()
-        
-        N_batches = int(np.ceil(len(dataset) / batch_size))
-        self.batches = np.array_split(dataset.indices, N_batches)
     
     def __len__(self):
         return len(self.batches)
 
     def __iter__(self):
         self.current_batch = 0
+        if self.shuffle:
+            self.dataset.shuffle()
+        
+        N_batches = int(np.ceil(len(self.dataset) / self.batch_size))
+        self.batches = np.array_split(self.dataset.indices, N_batches)
         print(f"Initialized dataloader with {len(self.batches)} batches")
         return self
 
@@ -79,5 +78,6 @@ class FashionMnistDataloader:
     
         batch_indices = self.batches[self.current_batch]
         x, y = self.dataset.data[batch_indices], self.dataset.labels[batch_indices]  
+        x = (x - np.mean(x, axis=0, keepdims=True))/(np.std(x, axis=0, keepdims=True) + 1e-10)
         self.current_batch += 1   
         return Tensor(x).float(), Tensor(y).long()
