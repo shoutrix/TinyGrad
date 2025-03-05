@@ -65,17 +65,13 @@ class Linear:
     def __repr__(self):
         return f"Linear(fan_in={self.fan_in}, fan_out={self.fan_out})"
 
-class SigmoidBackward:
-    def __init__(self, x):
-        self.x = x
-        
-    def __repr__(self):
-        return "<SigmoidBackward>"
-
+class SigmoidBackward(BaseBackward):
     def __call__(self, upstream_grad):
-        value = 1 / (1 + np.exp(-self.x.data))
+        self.init_grad()
+        x = self.sources[0]
+        value = self.sources[1]
         local_grad = value * (1 - value)
-        self.x.grad = upstream_grad * local_grad
+        x.grad.data = upstream_grad.data * local_grad
 
 class Sigmoid:
     def __init__(self):
@@ -85,20 +81,16 @@ class Sigmoid:
         sigmoid_value = 1 / (1 + np.exp(-x.data))
         out = Tensor(sigmoid_value, requires_grad=x.requires_grad)
         if x.requires_grad:
-            out._grad_fn = SigmoidBackward(x)
+            out._grad_fn = SigmoidBackward(x, sigmoid_value)
             out._prev = {x}
         return out
 
-class ReLUBackward:
-    def __init__(self, x):
-        self.x = x
-        
-    def __repr__(self):
-        return "<ReLUBackward>"
-
+class ReLUBackward(BaseBackward):
     def __call__(self, upstream_grad):
-        local_grad = (self.x.data > 0).astype(self.x.data.dtype)
-        self.x.grad = upstream_grad * local_grad
+        self.init_grad()
+        x = self.sources[0]
+        local_grad = (x.data > 0).astype(x.data.dtype)
+        x.grad.data = upstream_grad.data * local_grad
 
 
 class ReLU:
@@ -115,16 +107,12 @@ class ReLU:
         
 
 
-class TanhBackward:
-    def __init__(self, x):
-        self.x = x
-        
-    def __repr__(self):
-        return "<TanhBackward>"
-
+class TanhBackward(BaseBackward):
     def __call__(self, upstream_grad):
-        local_grad = 1 - np.tanh(self.x.data)**2
-        self.x.grad = upstream_grad * local_grad
+        self.init_grad()
+        x = self.sources[0]
+        local_grad = 1 - np.tanh(x.data)**2
+        x.grad.data = upstream_grad.data * local_grad
 
 class Tanh:
     def __init__(self):

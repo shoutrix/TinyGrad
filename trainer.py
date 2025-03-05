@@ -9,6 +9,7 @@ import wandb
 import os
 
 os.environ["OMP_NUM_THREADS"] = "4"
+
 @dataclass
 class Config:
     n_layers: int
@@ -74,6 +75,9 @@ class NN:
 
 class Trainer:
     def __init__(self, args, logging):
+        
+        os.environ["OMP_NUM_THREADS"] = "4"
+        
         self.args = args
         self.logging = logging
         if self.logging:
