@@ -118,6 +118,9 @@ class NAdam:
         self.first_moment = {id(param): np.zeros_like(param.data) for param in self.params}
         self.second_moment = {id(param): np.zeros_like(param.data) for param in self.params}
         self.t = 0
+        
+        
+        print("NADAM : ", self.lr, self.eps, self.weight_decay, self.beta1, self.beta2)
 
     def step(self):
         self.t += 1
