@@ -78,7 +78,7 @@ class FashionMnistDataloader:
     
         batch_indices = self.batches[self.current_batch]
         x, y = self.dataset.data[batch_indices], self.dataset.labels[batch_indices]  
-        # x = (x - np.mean(x, axis=0, keepdims=True))/(np.std(x, axis=0, keepdims=True) + 1e-10)
-        x = x/x.max()
+        x = (x - np.mean(x, axis=0, keepdims=True))/(np.std(x, axis=0, keepdims=True) + 1e-10)
+        # x = x/x.max()
         self.current_batch += 1   
         return Tensor(x).float(), Tensor(y).long()
