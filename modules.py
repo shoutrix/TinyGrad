@@ -4,6 +4,7 @@ from tensor import Tensor, BaseBackward
 
 def add_nonlinearity(name):
     assert name in ["sigmoid", "tanh", "ReLU"]
+    print("Adding Non-linearity : ", name)
     if name == "sigmoid":
         return Sigmoid()
     elif name == "tanh":
@@ -27,16 +28,34 @@ class init:
 
     @staticmethod
     def kaiming_uniform_(tensor, mode):
+        print("Initializing weights with kaiming uniform")
         bound = np.sqrt(6 / mode)
         print(f"Initializing weights from a uniform dist with bound : {-bound}, {bound}")
         tensor.data[:] = np.random.uniform(-bound, bound, tensor.data.shape)
 
     @staticmethod
     def xavier_uniform_(tensor):
+        print("Initializing weights with xavier uniform")
         fan_in, fan_out = tensor.data.shape
         bound = np.sqrt(6 / (fan_in + fan_out))
         print(f"Initializing weights from a uniform dist with bound : {-bound}, {bound}")
         tensor.data[:] = np.random.uniform(-bound, bound, tensor.data.shape)
+
+    @staticmethod
+    def kaiming_normal_(tensor, mode):
+        print("Initializing weights with kaiming normal")
+        bound = np.sqrt(6 / mode)
+        print(f"Initializing weights from a uniform dist with bound : {-bound}, {bound}")
+        tensor.data[:] = np.random.normal(loc=0.0, scale=bound, size=tensor.data.shape)
+
+    @staticmethod
+    def xavier_normal_(tensor):
+        print("Initializing weights with xavier normal")
+        fan_in, fan_out = tensor.data.shape
+        bound = np.sqrt(6 / (fan_in + fan_out))
+        print(f"Initializing weights from a uniform dist with bound : {-bound}, {bound}")
+        tensor.data[:] = np.random.normal(loc=0.0, scale=bound, size=tensor.data.shape)
+
 
 
 
@@ -56,6 +75,10 @@ class Linear:
             init.xavier_uniform_(self.weight)
         elif self.weight_init == "kaiming":
             init.kaiming_uniform_(self.weight, mode=self.fan_out)
+        elif self.weight_init == "Xavier_normal":
+            init.xavier_normal_(self.weight)
+        elif self.weight_init == "kaiming_normal":
+            init.kaiming_normal_(self.weight, mode=self.fan_out)
         init.zeros_(self.bias)
 
     def __call__(self, x):
@@ -71,7 +94,7 @@ class SigmoidBackward(BaseBackward):
         x = self.sources[0]
         value = self.sources[1]
         local_grad = value * (1 - value)
-        x.grad.data = upstream_grad.data * local_grad
+        x.grad.data += upstream_grad.data * local_grad
 
 class Sigmoid:
     def __init__(self):
@@ -90,7 +113,7 @@ class ReLUBackward(BaseBackward):
         self.init_grad()
         x = self.sources[0]
         local_grad = (x.data > 0).astype(x.data.dtype)
-        x.grad.data = upstream_grad.data * local_grad
+        x.grad.data += upstream_grad.data * local_grad
 
 
 class ReLU:
@@ -112,7 +135,7 @@ class TanhBackward(BaseBackward):
         self.init_grad()
         x = self.sources[0]
         local_grad = 1 - np.tanh(x.data)**2
-        x.grad.data = upstream_grad.data * local_grad
+        x.grad.data += upstream_grad.data * local_grad
 
 class Tanh:
     def __init__(self):
