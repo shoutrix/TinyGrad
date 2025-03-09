@@ -19,24 +19,23 @@ class SGD:
         for param in self.params:
             if param.grad is not None and param.requires_grad:
                 if self.weight_decay != 0:
-                    param.grad.data += self.weight_decay * param.data
+                    param.grad += self.weight_decay * param.data
                 
                 if self.momentum > 0:
                     b = self.b_cache[id(param)]
-                    b[:] = self.momentum * b + (1 - self.dampening) * param.grad.data
+                    b[:] = self.momentum * b + (1 - self.dampening) * param.grad
                     if self.nesterov:
-                        param.grad.data += self.momentum * b
+                        param.grad += self.momentum * b
                     else:
-                        param.grad.data = b
+                        param.grad = b
                 
-                param.data -= self.lr * param.grad.data
+                param.data -= self.lr * param.grad
                 
 
- 
     def zero_grad(self):
         for param in self.params:
             if param.grad is not None:
-                param.grad.zero_()
+                param.grad.fill(0)
 
 
 class RMSprop:
@@ -54,22 +53,22 @@ class RMSprop:
         for param in self.params:
             if param.grad is not None and param.requires_grad:
                 if self.weight_decay != 0:
-                    param.grad.data += self.weight_decay * param.data
+                    param.grad += self.weight_decay * param.data
                 
-                self.v_cache[id(param)] = self.alpha * self.v_cache[id(param)] + (1 - self.alpha) * np.power(param.grad.data, 2)
+                self.v_cache[id(param)] = self.alpha * self.v_cache[id(param)] + (1 - self.alpha) * np.power(param.grad, 2)
                 v = self.v_cache[id(param)]
 
                 if self.momentum > 0:
-                    self.b_cache[id(param)] = self.momentum * self.b_cache[id(param)] + param.grad.data / (np.sqrt(v) + self.eps)
+                    self.b_cache[id(param)] = self.momentum * self.b_cache[id(param)] + param.grad / (np.sqrt(v) + self.eps)
                     b = self.b_cache[id(param)]
                     param.data -= self.lr * b
                 else:
-                    param.data -= self.lr * (param.grad.data / (np.sqrt(v) + self.eps))
+                    param.data -= self.lr * (param.grad / (np.sqrt(v) + self.eps))
 
     def zero_grad(self):
         for param in self.params:
             if param.grad is not None:
-                param.grad.zero_()
+                param.grad.fill(0)
 
 class Adam:
     def __init__(self, params, lr=0.001, betas=(0.9, 0.999), eps=1e-8, weight_decay=0):
@@ -88,12 +87,12 @@ class Adam:
         for param in self.params:
             if param.grad is not None and param.requires_grad:
                 if self.weight_decay != 0:
-                    param.grad.data += self.weight_decay * param.data
+                    param.grad += self.weight_decay * param.data
 
-                self.first_moment[id(param)] = self.beta1 * self.first_moment[id(param)] + (1 - self.beta1) * param.grad.data
+                self.first_moment[id(param)] = self.beta1 * self.first_moment[id(param)] + (1 - self.beta1) * param.grad
                 m = self.first_moment[id(param)]
 
-                self.second_moment[id(param)] = self.beta2 * self.second_moment[id(param)] + (1 - self.beta2) * np.power(param.grad.data, 2)
+                self.second_moment[id(param)] = self.beta2 * self.second_moment[id(param)] + (1 - self.beta2) * np.power(param.grad, 2)
                 v = self.second_moment[id(param)]
 
                 m_hat = m / (1 - self.beta1 ** self.t)
@@ -104,9 +103,7 @@ class Adam:
     def zero_grad(self):
         for param in self.params:
             if param.grad is not None:
-                param.grad.zero_()
-                
-
+                param.grad.fill(0)
 
 class NAdam:
     def __init__(self, params, lr=0.001, betas=(0.9, 0.999), eps=1e-8, weight_decay=0):
@@ -128,9 +125,9 @@ class NAdam:
         for param in self.params:
             if param.grad is not None and param.requires_grad:
                 if self.weight_decay != 0:
-                    param.grad.data += self.weight_decay * param.data
+                    param.grad += self.weight_decay * param.data
 
-                g_t = param.grad.data
+                g_t = param.grad
 
                 self.first_moment[id(param)] = self.beta1 * self.first_moment[id(param)] + (1 - self.beta1) * g_t
                 m_t = self.first_moment[id(param)]
@@ -145,4 +142,4 @@ class NAdam:
     def zero_grad(self):
         for param in self.params:
             if param.grad is not None:
-                param.grad.zero_()
+                param.grad.fill(0)
