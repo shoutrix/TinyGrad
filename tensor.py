@@ -16,66 +16,64 @@ class BaseBackward:
     
     def init_grad(self):
         for source in self.sources:
-            if isinstance(source, Tensor) and source.grad is None and source.requires_grad:
-                source.grad = Tensor(np.zeros_like(source.data))
+            if isinstance(source, Tensor) and source.requires_grad:
+                if source.grad is None:
+                    source.grad = np.zeros_like(source.data)
+                else:
+                    source.grad.fill(0)
 
 class AddBackward(BaseBackward):
     def __call__(self, upstream_grad):
         self.init_grad()
-        
-        # print(type(self.sources[0]), type(self.sources[1]) ,self.sources[0].shape, self.sources[1].shape)
-        # print(self.sources[1].grad.data)
-        
         if self.sources[0].requires_grad:
-            expanded_dims = np.where(np.array(self.sources[0].shape) == 1)[0]  # for broadcasting
+            expanded_dims = np.where(np.array(self.sources[0].shape) == 1)[0]
             if len(expanded_dims) > 0:
-                np.add.at(self.sources[0].grad.data, slice(None), upstream_grad.sum(axis=tuple(expanded_dims), keepdims=True).data)
+                self.sources[0].grad += upstream_grad.sum(axis=tuple(expanded_dims), keepdims=True)
             else:
-                np.add.at(self.sources[0].grad.data, slice(None), upstream_grad.data)
+                self.sources[0].grad += upstream_grad
         
         if self.sources[1].requires_grad:
             expanded_dims = np.where(np.array(self.sources[1].shape) == 1)[0]
             if len(expanded_dims) > 0:
-                np.add.at(self.sources[1].grad.data, slice(None), upstream_grad.sum(axis=tuple(expanded_dims), keepdims=True).data)
+                self.sources[1].grad += upstream_grad.sum(axis=tuple(expanded_dims), keepdims=True)
             else:
-                np.add.at(self.sources[1].grad.data, slice(None), upstream_grad.data)
+                self.sources[1].grad += upstream_grad
 
 
 class SubBackward(BaseBackward):
     def __call__(self, upstream_grad):
         self.init_grad()
-        
         if self.sources[0].requires_grad:
             expanded_dims = np.where(np.array(self.sources[0].shape) == 1)[0]
             if len(expanded_dims) > 0:
-                np.add.at(self.sources[0].grad.data, slice(None), upstream_grad.sum(axis=tuple(expanded_dims), keepdims=True).data)
+                self.sources[0].grad += upstream_grad.sum(axis=tuple(expanded_dims), keepdims=True)
             else:
-                np.add.at(self.sources[0].grad.data, slice(None), upstream_grad.data)
+                self.sources[0].grad += upstream_grad
         
         if self.sources[1].requires_grad:
             expanded_dims = np.where(np.array(self.sources[1].shape) == 1)[0]
             if len(expanded_dims) > 0:
-                np.add.at(self.sources[1].grad.data, slice(None), -upstream_grad.sum(axis=tuple(expanded_dims), keepdims=True).data)
+                self.sources[1].grad += -upstream_grad.sum(axis=tuple(expanded_dims), keepdims=True)
             else:
-                np.add.at(self.sources[1].grad.data, slice(None), -upstream_grad.data)
+                self.sources[1].grad += -upstream_grad
 
             
 class MulBackward(BaseBackward):
     def __call__(self, upstream_grad):
         self.init_grad()
-        
         if self.sources[0].requires_grad:
             expanded_dims = np.where(np.array(self.sources[0].shape) == 1)[0]
             if len(expanded_dims) > 0:
-                np.add.at(self.sources[0].grad.data, slice(None), (upstream_grad * self.sources[1]).sum(axis=tuple(expanded_dims), keepdims=True).data)
+                self.sources[0].grad += (upstream_grad * self.sources[1].data).sum(axis=tuple(expanded_dims), keepdims=True)
             else:
-                np.add.at(self.sources[0].grad.data, slice(None), (upstream_grad * self.sources[1]).data)
+                self.sources[0].grad += (upstream_grad * self.sources[1].data)
 
         if self.sources[1].requires_grad:
             expanded_dims = np.where(np.array(self.sources[1].shape) == 1)[0]
-            if len(expanded_dims) > 0:np.add.at(self.sources[1].grad.data, slice(None), (upstream_grad * self.sources[0]).sum(axis=tuple(expanded_dims), keepdims=True).data)
+            if len(expanded_dims) > 0:
+                self.sources[1].grad += (upstream_grad * self.sources[0].data).sum(axis=tuple(expanded_dims), keepdims=True)
             else:
-                np.add.at(self.sources[1].grad.data, slice(None), (upstream_grad * self.sources[0]).data)
+                self.sources[1].grad += (upstream_grad * self.sources[0].data)
 
 
 class DivBackward(BaseBackward):
@@ -86,7 +84,7 @@ class DivBackward(BaseBackward):
     def __call__(self, upstream_grad):
         self.init_grad()
         if self.sources[0].requires_grad:
-            np.add.at(self.sources[0].grad.data, slice(None), (upstream_grad * (1 / self.scalar)).data)
+            self.sources[0].grad += (upstream_grad * (1 / self.scalar))
 
 class SumBackward(BaseBackward):
     def __init__(self, source, axis=None, keepdims=False):
@@ -101,7 +99,7 @@ class SumBackward(BaseBackward):
             if self.axis is not None:
                 grad_shape = np.array(self.sources[0].data.shape)
                 grad_shape[self.axis] = 1
-            np.add.at(self.sources[0].grad.data, slice(None), upstream_grad.data.reshape(grad_shape))
+            self.sources[0].grad += upstream_grad.reshape(grad_shape)
 
 class MeanBackward(BaseBackward):
     def __init__(self, source, axis=None, keepdims=False):
@@ -119,7 +117,7 @@ class MeanBackward(BaseBackward):
                 grad_shape[np.atleast_1d(self.axis)] = 1
             else:
                 scale = np.prod(self.sources[0].data.shape)
-            np.add.at(self.sources[0].grad.data, slice(None), (upstream_grad.data.reshape(grad_shape) * (1 / scale)))
+            self.sources[0].grad += (upstream_grad.reshape(grad_shape) * (1 / scale))
 
 
 
@@ -128,10 +126,10 @@ class MatmulBackward(BaseBackward):
         self.init_grad()
         
         if self.sources[0].requires_grad:
-            np.add.at(self.sources[0].grad.data, slice(None), (upstream_grad @ self.sources[1].transpose(1, 0)).data)
+            self.sources[0].grad += (upstream_grad @ self.sources[1].data.transpose(1, 0))
         
         if self.sources[1].requires_grad:
-            np.add.at(self.sources[1].grad.data, slice(None), (self.sources[0].transpose(1, 0) @ upstream_grad).data)
+            self.sources[1].grad += (self.sources[0].data.transpose(1, 0) @ upstream_grad)
 
 
 class PowerBackward(BaseBackward):
@@ -142,8 +140,8 @@ class PowerBackward(BaseBackward):
     def __call__(self, upstream_grad):
         self.init_grad()
         if self.sources[0].requires_grad:
-            grad_value = upstream_grad.data * (self.power * np.power(self.sources[0].data, self.power - 1))
-            np.add.at(self.sources[0].grad.data, slice(None), grad_value)
+            grad_value = upstream_grad * (self.power * np.power(self.sources[0].data, self.power - 1))
+            self.sources[0].grad += grad_value
 
 
 class TransposeBackward(BaseBackward):
@@ -156,7 +154,7 @@ class TransposeBackward(BaseBackward):
         self.init_grad()
         if self.sources[0].requires_grad:
             grad_value = np.transpose(upstream_grad.data, self.inverse_axes)
-            np.add.at(self.sources[0].grad.data, slice(None), grad_value)
+            self.sources[0].grad += grad_value
 
 
 
