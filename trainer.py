@@ -1,14 +1,12 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from modules import Linear, CrossEntropyLoss, add_nonlinearity
+from modules import Linear, CrossEntropyLoss, add_nonlinearity, BatchNorm
 from data_utils import load_data, FashionMnistDataloader
 from optimizers import SGD, RMSprop, Adam, NAdam
 from dataclasses import dataclass
 from typing import List, Optional
 import wandb
 import os
-
-os.environ["OMP_NUM_THREADS"] = "4"
 
 @dataclass
 class Config:
@@ -19,6 +17,7 @@ class Config:
     hidden_layer_size: Optional[int] = None
     layer_dims: Optional[List[int]] = None
     weight_init: Optional[str] = "kaiming"
+    batch_norm: bool = True
 
     def __post_init__(self):
         if self.layer_dims is None and self.hidden_layer_size is None:
@@ -42,10 +41,12 @@ class NN:
 
         self.modules = {}
         for i, (dim1, dim2) in enumerate(zip(layer_dims, layer_dims[1:])):
-            self.modules[f"Linear_{i}"] = Linear(dim1, dim2, config.weight_init)
+            self.modules[f"Linear_{i}"] = Linear(dim1, dim2, config.weight_init, config.non_linearity)
+            if config.batch_norm:
+                self.modules[f"BatchNorm_{i}"] = BatchNorm(dim2)
             if self.non_linearity is not None and self.non_linearity != "identity":
                 self.modules[f"{self.non_linearity}_{i}"] = add_nonlinearity(self.non_linearity)
-        self.modules[f"Linear_out"] = Linear(dim2, self.n_classes, config.weight_init)
+        self.modules[f"Linear_out"] = Linear(dim2, self.n_classes, config.weight_init, config.non_linearity)
 
         self.loss_fn = CrossEntropyLoss()
  
@@ -55,15 +56,20 @@ class NN:
             if isinstance(mod, Linear):
                 params[f"{name}_weight"] = mod.weight
                 params[f"{name}_bias"] = mod.bias
+            elif isinstance(mod, BatchNorm):
+                params[f"{name}_gamma"] = mod.gamma
+                params[f"{name}_beta"] = mod.beta
         return params
         
     
-    def forward(self, x, y):
+    def forward(self, x, y, training):
         # print(x.data.mean(), x.data.std(), x.data.max(), x.data.min(), np.linalg.norm(x.data))
         for name, mod in self.modules.items():
-            x = mod(x)
+            x = mod(x, training)
+            # print(x.name)
+
         loss, acc = self.get_loss_and_accuracy(x, y)
-        return loss, acc
+        return loss, acc, x
 
     def get_loss_and_accuracy(self, x, y):
         loss_ = self.loss_fn(x, y)
@@ -82,7 +88,7 @@ class Trainer:
         self.logging = logging
         if self.logging:
             print("logging to Wandb !!")
-        self.trainset, self.validset, self.evalset, n_classes, flattened_dim = load_data(args.dataset)
+        self.trainset, self.validset, self.evalset, n_classes, flattened_dim , self.labels = load_data(args.dataset)
 
         self.train_loader = FashionMnistDataloader(self.trainset, batch_size=args.batch_size, shuffle=True)
         self.valid_loader = FashionMnistDataloader(self.validset, batch_size=args.batch_size, shuffle=False)
@@ -94,7 +100,8 @@ class Trainer:
             n_classes=n_classes,
             in_dim=flattened_dim,
             hidden_layer_size=args.hidden_size,
-            weight_init=args.weight_init
+            weight_init=args.weight_init,
+            batch_norm=False
         )
         self.model = NN(self.model_config)
         self.optimizer = self.get_optimizer()
@@ -116,15 +123,19 @@ class Trainer:
             print("Starting Epoch : ", epoch+1)
             total_loss, total_acc = 0, 0
             for i, (batch_data, batch_labels) in enumerate(self.train_loader):
-                loss, acc = self.model.forward(batch_data, batch_labels)
+                loss, acc, _ = self.model.forward(batch_data, batch_labels, training=True)
 
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
                 
                 if self.logging:
+                    # for name, param in self.model.parameters().items():
+                    #     # print(name)
+                    #     # print(param.grad)
+                        
                     for name, param in self.model.parameters().items():
-                        wandb.log({f"{name}_grad_norm":np.linalg.norm(param.grad.data), f"{name}_norm":np.linalg.norm(param.data)})
+                        wandb.log({f"{name}_grad_norm":np.linalg.norm(param.grad), f"{name}_norm":np.linalg.norm(param.data)})
                 
                 total_loss += loss.item()
                 total_acc += acc
@@ -136,11 +147,12 @@ class Trainer:
             print(f"Epoch {epoch+1}: Loss={avg_loss:.4f}, Accuracy={avg_acc:.4f}")
 
             if self.logging:
+                print("Logging Train stats ...")
                 wandb.log({"train_loss": avg_loss, "train_accuracy": avg_acc})
 
             valid_total_loss, valid_total_acc = 0, 0
             for batch_data, batch_labels in self.valid_loader:
-                loss, acc = self.model.forward(batch_data, batch_labels)
+                loss, acc, _ = self.model.forward(batch_data, batch_labels, training=False)
                 valid_total_loss += loss.item()
                 valid_total_acc += acc
 
@@ -148,4 +160,37 @@ class Trainer:
             valid_avg_acc = valid_total_acc / len(self.valid_loader)
             print(f"Validation: Loss={valid_avg_loss:.4f}, Accuracy={valid_avg_acc:.4f}")
             if self.logging:
-                wandb.log({"val_loss": avg_loss, "val_accuracy": avg_acc})
+                print("Logging Valid stats ...")
+                wandb.log({"val_loss": valid_avg_loss, "val_accuracy": valid_avg_acc})
+                
+                
+    def infer(self):
+        test_total_loss, test_total_acc = 0, 0
+        preds = []
+        target = []
+        for batch_data, batch_labels in self.test_loader:
+            loss, acc, logits = self.model.forward(batch_data, batch_labels, training=False)
+            predicted = np.argmax(logits.data, axis=1)
+            preds.append(predicted)
+            target.append(batch_labels.data)
+            print(predicted.shape, batch_labels.data.shape)
+            
+            test_total_loss += loss.item()
+            test_total_acc += acc
+
+        test_avg_loss = test_total_loss / len(self.test_loader)
+        test_avg_acc = test_total_acc / len(self.test_loader)
+        print(f"\n\nInference: Loss={test_avg_loss:.4f}, Accuracy={test_avg_acc:.4f}")
+        if self.logging:
+            print("Logging Inference stats ...")
+            wandb.log({"test_loss": test_avg_loss, "test_accuracy": test_avg_acc})
+            
+            preds = np.concatenate(preds)
+            target = np.concatenate(target)
+            
+            print(preds.shape, target.shape)
+            
+            
+            wandb.log({"confusion_matrix" : wandb.plot.confusion_matrix(probs=None, y_true=target, preds=preds, class_names=self.labels)})
+
+
