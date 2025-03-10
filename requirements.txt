@@ -1,0 +1,7 @@
+keras==2.13.1
+matplotlib==3.7.5
+numpy==1.22.1
+numpy==1.23.5
+tensorflow==2.13.1
+torch==2.1.0
+torch==1.13.0.post200
