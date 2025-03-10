@@ -20,6 +20,7 @@ class TrainerConfig:
     num_layers: int = 3
     hidden_size: int = 256
     activation: str = "ReLU"
+    max_grad_norm: float = 0.0
 
 def main():
     wandb.init()
@@ -59,5 +60,5 @@ if __name__ == "__main__":
         },
     }
 
-    sweep_id = wandb.sweep(sweep=sweep_configuration, project="sweep_trial04", entity="shoutrik")
+    sweep_id = wandb.sweep(sweep=sweep_configuration, project="Tinygrad_sweep_trial01", entity="shoutrik")
     wandb.agent(sweep_id, function=main, count=50)

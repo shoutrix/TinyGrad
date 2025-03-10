@@ -105,9 +105,14 @@ class Trainer:
         )
         self.model = NN(self.model_config)
         self.optimizer = self.get_optimizer()
+        self.max_grad_norm = args.max_grad_norm
 
     def get_optimizer(self):
-        if self.args.optimizer in ["sgd", "momentum", "nag"]:
+        if self.args.optimizer in "sgd":
+            return SGD(params=self.model.parameters(), lr=self.args.learning_rate, momentum=0.0, dampening=0.0, nesterov=False, weight_decay=self.args.weight_decay)
+        elif self.args.optimizer in "momentum":
+            return SGD(params=self.model.parameters(), lr=self.args.learning_rate, momentum=self.args.momentum, dampening=0.0, nesterov=False, weight_decay=self.args.weight_decay)
+        elif self.args.optimizer in "nag":
             return SGD(params=self.model.parameters(), lr=self.args.learning_rate, momentum=self.args.momentum, dampening=0.0, nesterov=True, weight_decay=self.args.weight_decay)
         elif self.args.optimizer == "rmsprop":
             return RMSprop(params=self.model.parameters(), lr=self.args.learning_rate, alpha=self.args.beta, eps=self.args.epsilon, weight_decay=self.args.weight_decay, momentum=self.args.momentum)
@@ -118,6 +123,22 @@ class Trainer:
         else:
             raise ValueError(f"Ugghh, unsupported optimizer: {self.args.optimizer}")
 
+
+    def apply_grad_norm(self):
+        print("Applying Grad Norm ...")
+        total_norm = 0.0
+        if self.max_grad_norm is not None:
+            for param in self.model.parameters().values():
+                if param.grad is not None and param.requires_grad:
+                    total_norm += np.sum(param.grad ** 2)
+
+            total_norm = np.sqrt(total_norm)
+            clip_coef = self.max_grad_norm / (total_norm + 1e-6) if total_norm > self.max_grad_norm else 1.0
+        
+        for param in self.model.parameters().values():
+            param.grad *= clip_coef
+
+
     def train(self):
         for epoch in range(self.args.epochs):
             print("Starting Epoch : ", epoch+1)
@@ -127,6 +148,11 @@ class Trainer:
 
                 self.optimizer.zero_grad()
                 loss.backward()
+                
+                
+                if self.max_grad_norm!=0.0:
+                    self.apply_grad_norm()
+                    
                 self.optimizer.step()
                 
                 if self.logging:
