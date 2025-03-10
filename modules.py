@@ -101,8 +101,9 @@ class Linear:
             init.kaiming_normal_(self.weight, mode=self.fan_out)
         init.zeros_(self.bias)
 
-    def __call__(self, x):
+    def __call__(self, x, training):
         value = x @ self.weight + self.bias
+        value.name = "LinearOut"
         return value
 
     def __repr__(self):
@@ -110,7 +111,7 @@ class Linear:
 
 class SigmoidBackward(BaseBackward):
     def __call__(self, upstream_grad):
-        self.init_grad()
+        
         x = self.sources[0]
         value = self.sources[1]
         local_grad = value * (1 - value)
@@ -120,17 +121,18 @@ class Sigmoid:
     def __init__(self):
         self.cache = None        
 
-    def __call__(self, x):
+    def __call__(self, x, training):
         sigmoid_value = 1 / (1 + np.exp(-x.data))
         out = Tensor(sigmoid_value, requires_grad=x.requires_grad)
         if x.requires_grad:
             out._grad_fn = SigmoidBackward(x, sigmoid_value)
             out._prev = {x}
+            out.name = "SigmoidOut"
         return out
 
 class ReLUBackward(BaseBackward):
     def __call__(self, upstream_grad):
-        self.init_grad()
+        
         x = self.sources[0]
         local_grad = (x.data > 0).astype(x.data.dtype)
         x.grad += upstream_grad * local_grad
@@ -140,19 +142,20 @@ class ReLU:
     def __init__(self):
         self.cache = None
     
-    def __call__(self, x):
+    def __call__(self, x, training):
         value = np.maximum(0, x.data)
         out = Tensor(value, requires_grad=x.requires_grad)
         if x.requires_grad:
             out._grad_fn = ReLUBackward(x)
             out._prev = {x}
+            out.name = "ReLUOut"
         return out
         
 
 
 class TanhBackward(BaseBackward):
     def __call__(self, upstream_grad):
-        self.init_grad()
+        
         x = self.sources[0]
         local_grad = 1 - np.tanh(x.data)**2
         x.grad += upstream_grad * local_grad
@@ -161,12 +164,14 @@ class Tanh:
     def __init__(self):
         self.cache = None        
 
-    def __call__(self, x):
+    def __call__(self, x, training):
+        # print(type(x))
         tanh_value = np.tanh(x.data)
         out = Tensor(tanh_value, requires_grad=x.requires_grad)
         if x.requires_grad:
             out._grad_fn = TanhBackward(x)
             out._prev = {x}
+            out.name = "TanhOut"
         return out
 
 class MSELoss:
@@ -179,7 +184,7 @@ class MSELoss:
             
 class CrossEntropyLossBackward(BaseBackward):
     def __call__(self, upstream_grad):
-        self.init_grad()
+        
         
         pred = self.sources[0]
         target = self.sources[1]   
@@ -210,30 +215,89 @@ class CrossEntropyLoss:
 
 
 
+class BatchNormBackward(BaseBackward):
+    def __call__(self, upstream_grad):
+        
+        # print("Batchnorm backward called  !!")
+        
+        x = self.sources[0]
+        x_norm = self.sources[1]
+        mean = self.sources[2]
+        var = self.sources[3]
+        gamma = self.sources[4]
+        beta = self.sources[5]
+        epsilon = self.sources[6]
+                
+        m = upstream_grad.shape[0]
+
+        dL_dbeta = np.sum(upstream_grad, axis=0)
+        dL_dgamma = np.sum(upstream_grad * x_norm, axis=0)
+        dL_dx_norm = upstream_grad * gamma.data
+        dL_dvar = np.sum(dL_dx_norm * (x_norm * -0.5) * (var + epsilon) ** (-1.5), axis=0)
+        dL_dmean = np.sum(dL_dx_norm * -1 / np.sqrt(var + epsilon), axis=0) + dL_dvar * np.sum(-2 * x_norm / m, axis=0)
+        dL_dx = dL_dx_norm / np.sqrt(var + epsilon) + dL_dvar * 2 * x_norm / m + dL_dmean / m
+
+        gamma.grad += dL_dgamma
+        beta.grad += dL_dbeta
+        x.grad += dL_dx
+        
+
+# def batchnorm_backward(dout, cache):
+
+# 	N, D = dout.shape
+# 	x_mu, inv_var, x_hat, gamma = cache
+
+# 	# intermediate partial derivatives
+# 	dxhat = dout * gamma
+
+# 	# final partial derivatives
+# 	dx = (1. / N) * inv_var * (N*dxhat - np.sum(dxhat, axis=0)
+# 		- x_hat*np.sum(dxhat*x_hat, axis=0))
+# 	dbeta = np.sum(dout, axis=0)
+# 	dgamma = np.sum(x_hat*dout, axis=0)
+
+# 	return dx, dgamma, dbeta
+        
+        
+
 
 class BatchNorm:
-    def __init__(self, num_features, epsilon=1e-5, momentum=0.9):
+    def __init__(self, num_features, epsilon=1e-8, momentum=0.9):
         self.epsilon = epsilon
         self.momentum = momentum
-        self.gamma = np.ones(num_features)
-        self.beta = np.zeros(num_features)
+        self.gamma = Tensor(np.ones(num_features))
+        self.beta = Tensor(np.zeros(num_features))
         self.running_mean = np.zeros(num_features)
         self.running_var = np.zeros(num_features)
 
-    def forward(self, x, training=True):
+    def __call__(self, x, training=True):
+        x_data = x.data
+        m = x_data.shape[0]
+
         if training:
-            batch_mean = np.mean(x, axis=0)
-            batch_var = np.var(x, axis=0)
+            mean = np.mean(x_data, axis=0)
+            var = np.var(x_data, axis=0)
 
-            x_norm = (x - batch_mean) / np.sqrt(batch_var + self.epsilon)
-            out = self.gamma * x_norm + self.beta
+            x_norm = (x_data - mean) / np.sqrt(var + self.epsilon)
+            out = self.gamma.data * x_norm + self.beta.data
 
-            # Update running estimates
-            self.running_mean = self.momentum * self.running_mean + (1 - self.momentum) * batch_mean
-            self.running_var = self.momentum * self.running_var + (1 - self.momentum) * batch_var
+            self.running_mean = self.momentum * self.running_mean + (1 - self.momentum) * mean
+            self.running_var = self.momentum * self.running_var + (1 - self.momentum) * var
+            
+            out = Tensor(out)
+            out.name = "BatchNormOut"
+            out.requires_grad = True
+            out._prev = {x, self.gamma, self.beta}
+            out._grad_fn = BatchNormBackward(x, x_norm, mean, var, self.gamma, self.beta, self.epsilon)
+            return out
+            
         else:
-            # Use running statistics at inference time
-            x_norm = (x - self.running_mean) / np.sqrt(self.running_var + self.epsilon)
-            out = self.gamma * x_norm + self.beta
+            
+            # print(type(x_data), type(self.running_mean), type(self.running_var), type(self.epsilon))
+            x_norm = (x_data - self.running_mean) / np.sqrt(self.running_var + self.epsilon)
+            out = self.gamma.data * x_norm + self.beta.data
+            
+            out = Tensor(out)
+            return out
 
-        return out
+
