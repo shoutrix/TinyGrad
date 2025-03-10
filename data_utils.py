@@ -8,8 +8,29 @@ def load_data(name):
     
     if name == "mnist":
         (x_train, y_train), (x_test, y_test) = mnist.load_data()
+        labels = {0: "0",
+          1: "1",
+          2: "2",
+          3: "3",
+          4: "4",
+          5: "5",
+          6: "6",
+          7: "7",
+          8: "8",
+          9: "9"}
+
     elif name == "fashion_mnist":
         (x_train, y_train), (x_test, y_test) = fashion_mnist.load_data()
+        labels = {0: "T-shirt/top",
+          1: "Trouser",
+          2: "Pullover",
+          3: "Dress",
+          4: "Coat",
+          5: "Sandal",
+          6: "Shirt",
+          7: "Sneaker",
+          8: "Bag",
+          9: "Ankle boot"}
     else:
         raise ValueError(f"dataset : {name} is not supported !!")
     
@@ -31,7 +52,7 @@ def load_data(name):
     validset = FashionMnistDataset(x_valid, y_valid)
     evalset = FashionMnistDataset(x_test, y_test)
 
-    return trainset, validset, evalset, n_classes, flattened_dim
+    return trainset, validset, evalset, n_classes, flattened_dim, labels
 
 
  
