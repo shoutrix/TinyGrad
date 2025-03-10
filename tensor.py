@@ -14,17 +14,17 @@ class BaseBackward:
     def __call__(self, upstream_grad):
         raise NotImplementedError("Not Implemented")
     
-    def init_grad(self):
-        for source in self.sources:
-            if isinstance(source, Tensor) and source.requires_grad:
-                if source.grad is None:
-                    source.grad = np.zeros_like(source.data)
-                else:
-                    source.grad.fill(0)
+    # def init_grad(self):
+    #     for source in self.sources:
+    #         if isinstance(source, Tensor) and source.requires_grad:
+    #             if source.grad is None:
+    #                 source.grad = np.zeros_like(source.data)
+    #             else:
+    #                 source.grad.fill(0)
 
 class AddBackward(BaseBackward):
     def __call__(self, upstream_grad):
-        self.init_grad()
+        
         if self.sources[0].requires_grad:
             expanded_dims = np.where(np.array(self.sources[0].shape) == 1)[0]
             if len(expanded_dims) > 0:
@@ -42,7 +42,7 @@ class AddBackward(BaseBackward):
 
 class SubBackward(BaseBackward):
     def __call__(self, upstream_grad):
-        self.init_grad()
+        
         if self.sources[0].requires_grad:
             expanded_dims = np.where(np.array(self.sources[0].shape) == 1)[0]
             if len(expanded_dims) > 0:
@@ -60,7 +60,7 @@ class SubBackward(BaseBackward):
             
 class MulBackward(BaseBackward):
     def __call__(self, upstream_grad):
-        self.init_grad()
+        
         if self.sources[0].requires_grad:
             expanded_dims = np.where(np.array(self.sources[0].shape) == 1)[0]
             if len(expanded_dims) > 0:
@@ -82,7 +82,7 @@ class DivBackward(BaseBackward):
         self.scalar = scalar
 
     def __call__(self, upstream_grad):
-        self.init_grad()
+        
         if self.sources[0].requires_grad:
             self.sources[0].grad += (upstream_grad * (1 / self.scalar))
 
@@ -93,7 +93,7 @@ class SumBackward(BaseBackward):
         self.keepdims = keepdims
 
     def __call__(self, upstream_grad):
-        self.init_grad()
+        
         if self.sources[0].requires_grad:
             grad_shape = np.ones_like(self.sources[0].data.shape)
             if self.axis is not None:
@@ -108,7 +108,7 @@ class MeanBackward(BaseBackward):
         self.keepdims = keepdims
 
     def __call__(self, upstream_grad):
-        self.init_grad()
+        
         if self.sources[0].requires_grad:
             grad_shape = np.ones_like(self.sources[0].data.shape)
             if self.axis is not None:
@@ -123,7 +123,7 @@ class MeanBackward(BaseBackward):
 
 class MatmulBackward(BaseBackward):
     def __call__(self, upstream_grad):
-        self.init_grad()
+        
         
         if self.sources[0].requires_grad:
             self.sources[0].grad += (upstream_grad @ self.sources[1].data.transpose(1, 0))
@@ -138,7 +138,7 @@ class PowerBackward(BaseBackward):
         self.power = power
 
     def __call__(self, upstream_grad):
-        self.init_grad()
+        
         if self.sources[0].requires_grad:
             grad_value = upstream_grad * (self.power * np.power(self.sources[0].data, self.power - 1))
             self.sources[0].grad += grad_value
@@ -151,7 +151,7 @@ class TransposeBackward(BaseBackward):
         self.inverse_axes = np.argsort(axes) if axes is not None else None
 
     def __call__(self, upstream_grad):
-        self.init_grad()
+        
         if self.sources[0].requires_grad:
             grad_value = np.transpose(upstream_grad.data, self.inverse_axes)
             self.sources[0].grad += grad_value
@@ -166,7 +166,7 @@ class Tensor:
         self.data = data
         self.shape = data.shape
         self.requires_grad = requires_grad
-        self.grad = None
+        self.grad = np.zeros_like(self.data)
         self._grad_fn = None
         self._prev = set()
         self.name = name
@@ -270,14 +270,15 @@ class Tensor:
                 return
             visited.add(tensor)
             for prev in tensor._prev:
+                # print(prev.name, prev.shape, prev._grad_fn)
                 build_topo_order(prev)
             stack.append(tensor)
                 
         build_topo_order(self)
             
         for tensor in reversed(stack):
+            # print(tensor.name, tensor.shape, tensor._grad_fn)
             if tensor.grad is not None and tensor._grad_fn:
-                # print(tensor.shape, tensor._grad_fn)
                 tensor._grad_fn(tensor.grad)
                 
         
