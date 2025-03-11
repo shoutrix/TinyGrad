@@ -48,17 +48,17 @@ if __name__ == "__main__":
         "name": "sweep_trial01",
         "metric": {"goal": "maximize", "name": "val_accuracy"},
         "parameters": {
-            "epochs": {"values": [10, 15]},
-            "num_layers": {"values": [3, 4, 5]},
-            "hidden_size": {"values": [64, 128, 256]},
-            "weight_decay": {"values": [0, 0.0005, 0.005]},
+            "epochs": {"values": [10]},
+            "num_layers": {"values": [4]},
+            "hidden_size": {"values": [256]},
+            "weight_decay": {"values": [0.005]},
             "learning_rate": {"values": [1e-2, 1e-3, 1e-4]},
-            "optimizer": {"values": ["momentum", "nag", "rmsprop", "adam", "nadam"]},
-            "batch_size": {"values": [32, 64]},
-            "weight_init": {"values": ["random", "Xavier", "kaiming"]},
-            "activation": {"values": ["sigmoid", "tanh", "ReLU"]},
+            "optimizer": {"values": ["adam"]},
+            "batch_size": {"values": [64]},
+            "weight_init": {"values": ["kaiming"]},
+            "activation": {"values": ["ReLU"]},
         },
     }
 
-    sweep_id = wandb.sweep(sweep=sweep_configuration, project="Tinygrad_sweep_trial01", entity="shoutrik")
-    wandb.agent(sweep_id, function=main, count=50)
+    sweep_id = wandb.sweep(sweep=sweep_configuration, project="sweep_trial02", entity="shoutrik")
+    wandb.agent(sweep_id, function=main, count=5)
