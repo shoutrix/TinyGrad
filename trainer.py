@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from modules import Linear, CrossEntropyLoss, add_nonlinearity, BatchNorm
+from modules import Linear, CrossEntropyLoss, add_nonlinearity, BatchNorm, Dropout
 from data_utils import load_data, FashionMnistDataloader
 from optimizers import SGD, RMSprop, Adam, NAdam
 from dataclasses import dataclass
@@ -18,6 +18,7 @@ class Config:
     layer_dims: Optional[List[int]] = None
     weight_init: Optional[str] = "kaiming"
     batch_norm: bool = True
+    dropout_p: float = 0.2
 
     def __post_init__(self):
         if self.layer_dims is None and self.hidden_layer_size is None:
@@ -35,6 +36,8 @@ class NN:
         self.non_linearity = config.non_linearity
         self.n_classes = config.n_classes
         self.in_dim = config.in_dim
+        self.dropout_p = config.dropout_p
+        self.apply_dropout = True if config.dropout_p>0.0 else False
 
         layer_dims = config.layer_dims if config.layer_dims is not None else [config.hidden_layer_size] * self.n_layers
         layer_dims = [self.in_dim] + layer_dims
@@ -46,9 +49,14 @@ class NN:
                 self.modules[f"BatchNorm_{i}"] = BatchNorm(dim2)
             if self.non_linearity is not None and self.non_linearity != "identity":
                 self.modules[f"{self.non_linearity}_{i}"] = add_nonlinearity(self.non_linearity)
+            if self.dropout_p > 0.0:
+                self.modules[f"Dropout_{i}"] = Dropout(self.dropout_p)
         self.modules[f"Linear_out"] = Linear(dim2, self.n_classes, config.weight_init, config.non_linearity)
 
         self.loss_fn = CrossEntropyLoss()
+        
+    def eval(self):
+        self.apply_dropout = False
  
     def parameters(self):
         params = {}
@@ -101,7 +109,8 @@ class Trainer:
             in_dim=flattened_dim,
             hidden_layer_size=args.hidden_size,
             weight_init=args.weight_init,
-            batch_norm=False
+            batch_norm=False,
+            dropout_p=args.dropout_p,
         )
         self.model = NN(self.model_config)
         self.optimizer = self.get_optimizer()
@@ -214,7 +223,7 @@ class Trainer:
             preds = np.concatenate(preds)
             target = np.concatenate(target)
             
-            print(preds.shape, target.shape)
+            # print(preds.shape, target.shape)
             
             
             wandb.log({"confusion_matrix" : wandb.plot.confusion_matrix(probs=None, y_true=target, preds=preds, class_names=self.labels)})

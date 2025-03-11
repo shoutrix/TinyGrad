@@ -72,8 +72,6 @@ class init:
         tensor.data[:] = np.random.normal(loc=0.0, scale=bound, size=tensor.data.shape)
 
 
-
-
 class Linear:
     def __init__(self, fan_in, fan_out, weight_init, nonlinearity):
         self.nonlinearity=nonlinearity
@@ -203,7 +201,7 @@ class CrossEntropyLoss:
         # print(pred)    
         exp_ = np.exp(pred.data)
         # print("exp : ", exp_)
-        prob = exp_ / exp_.sum(axis=1, keepdims=True)
+        prob = exp_ / (exp_.sum(axis=1, keepdims=True) + 1e-8)
         
         prob_filtered = prob[np.arange(target.shape[0]), target.data]
         mean_neg_log_likelihood = -np.log(prob_filtered).mean()
@@ -214,6 +212,31 @@ class CrossEntropyLoss:
         return loss
 
 
+class DropoutBackward(BaseBackward):
+    def __call__(self, upstream_grad):
+        x = self.sources[0]
+        mask = self.sources[1]
+        x.grad += upstream_grad * mask if mask is not None else upstream_grad
+    
+
+class Dropout:
+    def __init__(self, dropout_p):
+        self.dropout_p = dropout_p
+    
+    def __call__(self, x, train=True):
+        x_data = x.data
+        if train:
+            mask = (np.random.rand(*x_data.shape) > self.dropout_p) / (1 - self.dropout_p)
+            value = x_data * mask
+            
+            out = Tensor(value, name="DropoutOut", requires_grad=True)
+            out._prev = {x}
+            out._grad_fn = DropoutBackward(x, mask)
+            return out
+            
+        else:
+            return x
+        
 
 class BatchNormBackward(BaseBackward):
     def __call__(self, upstream_grad):
