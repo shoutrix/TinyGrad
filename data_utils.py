@@ -6,6 +6,8 @@ import random
 
 def load_data(name):
     
+    np.random.seed(42)
+    
     if name == "mnist":
         (x_train, y_train), (x_test, y_test) = mnist.load_data()
         labels = {0: "0",
