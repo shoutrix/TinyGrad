@@ -15,6 +15,7 @@ class Config:
     n_classes: int
     in_dim: int
     hidden_layer_size: Optional[int] = None
+    hidden_layer_size_list: Optional[list] = None
     layer_dims: Optional[List[int]] = None
     weight_init: Optional[str] = "kaiming"
     batch_norm: bool = True
@@ -41,6 +42,8 @@ class NN:
 
         layer_dims = config.layer_dims if config.layer_dims is not None else [config.hidden_layer_size] * self.n_layers
         layer_dims = [self.in_dim] + layer_dims
+
+        print("layer dims : ", layer_dims)
 
         self.modules = {}
         for i, (dim1, dim2) in enumerate(zip(layer_dims, layer_dims[1:])):
@@ -108,6 +111,7 @@ class Trainer:
             n_classes=n_classes,
             in_dim=flattened_dim,
             hidden_layer_size=args.hidden_size,
+            layer_dims=args.hidden_size_list,
             weight_init=args.weight_init,
             batch_norm=False,
             dropout_p=args.dropout_p,
@@ -134,7 +138,7 @@ class Trainer:
 
 
     def apply_grad_norm(self):
-        print("Applying Grad Norm ...")
+        # print("Applying Grad Norm ...")
         total_norm = 0.0
         if self.max_grad_norm is not None:
             for param in self.model.parameters().values():
@@ -165,12 +169,10 @@ class Trainer:
                 self.optimizer.step()
                 
                 if self.logging:
-                    # for name, param in self.model.parameters().items():
-                    #     # print(name)
-                    #     # print(param.grad)
-                        
                     for name, param in self.model.parameters().items():
                         wandb.log({f"{name}_grad_norm":np.linalg.norm(param.grad), f"{name}_norm":np.linalg.norm(param.data)})
+                # for name, param in self.model.parameters().items():
+                #     print(f"{name}_weight_norm : ", np.linalg.norm(param.data))
                 
                 total_loss += loss.item()
                 total_acc += acc
@@ -208,7 +210,7 @@ class Trainer:
             predicted = np.argmax(logits.data, axis=1)
             preds.append(predicted)
             target.append(batch_labels.data)
-            print(predicted.shape, batch_labels.data.shape)
+            # print(predicted.shape, batch_labels.data.shape)
             
             test_total_loss += loss.item()
             test_total_acc += acc

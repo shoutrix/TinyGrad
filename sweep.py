@@ -21,6 +21,7 @@ class TrainerConfig:
     hidden_size: int = 256
     activation: str = "ReLU"
     max_grad_norm: float = 0.0
+    hidden_size_list: list = None
 
 def main():
     wandb.init()
@@ -42,6 +43,7 @@ def main():
     trainer = Trainer(config, logging=True)
     trainer.train()
 
+
 if __name__ == "__main__":
     sweep_configuration = {
         "method": "bayes",
@@ -51,7 +53,7 @@ if __name__ == "__main__":
             "epochs": {"values": [10]},
             "num_layers": {"values": [4]},
             "hidden_size": {"values": [256]},
-            "weight_decay": {"values": [0.005]},
+            "weight_decay": {"values": [0.0001]},
             "learning_rate": {"values": [1e-2, 1e-3, 1e-4]},
             "optimizer": {"values": ["adam"]},
             "batch_size": {"values": [64]},
