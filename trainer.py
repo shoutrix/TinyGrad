@@ -57,9 +57,9 @@ class NN:
                 self.modules[f"Dropout_{i}"] = Dropout(self.dropout_p)
         self.modules[f"Linear_out"] = Linear(dim2, self.n_classes, config.weight_init, config.non_linearity)
 
-        if config.loss_fn  == "cross_entropy_loss":
+        if config.loss_fn  == "cross_entropy":
             self.loss_fn = CrossEntropyLoss(label_smoothing=0.1)
-        elif config.loss_fn == "MSE":
+        elif config.loss_fn == "mean_squared_error":
             self.loss_fn = MSELoss()
         
     def eval(self):

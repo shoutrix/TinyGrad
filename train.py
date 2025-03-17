@@ -30,7 +30,7 @@ def parse_args():
 
     parser.add_argument("-d", "--dataset", type=str, choices=["mnist", "fashion_mnist"], required=False, default="fashion_mnist")
 
-    parser.add_argument("-e", "--epochs", type=int, default=30, help="Number of epochs")
+    parser.add_argument("-e", "--epochs", type=int, default=10, help="Number of epochs")
     parser.add_argument("-b", "--batch_size", type=int, default=128, help="Batch size")
     parser.add_argument("-l", "--loss", type=str, choices=["mean_squared_error", "cross_entropy"], required=False, default="cross_entropy")
     parser.add_argument("-o", "--optimizer", type=str, choices=["sgd", "momentum", "nag", "rmsprop", "adam", "nadam"], required=False, default="adamw")
@@ -49,8 +49,8 @@ def parse_args():
     parser.add_argument("-a", "--activation", type=str, choices=["identity", "sigmoid", "tanh", "ReLU"], required=False, default="ReLU")
     parser.add_argument("-bn", "--batch_norm", type=bool, required=False, default=True)
     parser.add_argument("-mgn", "--max_grad_norm", type=float, required=False, default=0.0)
-    parser.add_argument("-do", "--dropout_p", type=float, required=False, default=0.4)    
-    parser.add_argument("-lo", "--loss_fn", type=str, required=False, default="cross_entropy_loss")    
+    parser.add_argument("-do", "--dropout_p", type=float, required=False, default=0.2)    
+    parser.add_argument("-lo", "--loss_fn", type=str, required=False, choices=["mean_squared_error", "cross_entropy"], default="cross_entropy")    
 
 
     return parser.parse_args()
@@ -64,7 +64,7 @@ if __name__ == "__main__":
         logging = True
         wandb.init(project=f"{args.wandb_project}", 
                             entity=args.wandb_entity, 
-                            name=f"VarHidden_LabelSmoothing_epoch{args.epochs}_batch{args.batch_size}_batchnorm{args.batch_norm}_dropout{args.dropout_p}_optim{args.optimizer}_lr{args.learning_rate}_init{args.weight_init}_layers{args.num_layers}_hidden{args.hidden_size}_activation{args.activation}_weightdecay{args.weight_decay}",
+                            name=f"CE_VarHidden_LabelSmoothing_epoch{args.epochs}_batch{args.batch_size}_batchnorm{args.batch_norm}_dropout{args.dropout_p}_optim{args.optimizer}_lr{args.learning_rate}_init{args.weight_init}_layers{args.num_layers}_hidden{args.hidden_size}_activation{args.activation}_weightdecay{args.weight_decay}",
                             config=vars(args))
     else:
         logging = False
