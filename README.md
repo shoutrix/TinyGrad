@@ -1,4 +1,4 @@
-# Custom Autograd and Neural Network Library
+# TinyGrad: Custom Autograd and Neural Network Library
 
 ## Overview
 
