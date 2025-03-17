@@ -1,8 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from modules import Linear, CrossEntropyLoss, add_nonlinearity, BatchNorm, Dropout
+from modules import Linear, CrossEntropyLoss, add_nonlinearity, BatchNorm, Dropout, MSELoss
 from data_utils import load_data, FashionMnistDataloader
-from optimizers import SGD, RMSprop, Adam, NAdam
+from optimizers import SGD, RMSprop, Adam, NAdam, AdamW
 from dataclasses import dataclass
 from typing import List, Optional
 import wandb
@@ -20,6 +20,7 @@ class Config:
     weight_init: Optional[str] = "kaiming"
     batch_norm: bool = True
     dropout_p: float = 0.2
+    loss_fn:str = "mse"
 
     def __post_init__(self):
         if self.layer_dims is None and self.hidden_layer_size is None:
@@ -56,7 +57,10 @@ class NN:
                 self.modules[f"Dropout_{i}"] = Dropout(self.dropout_p)
         self.modules[f"Linear_out"] = Linear(dim2, self.n_classes, config.weight_init, config.non_linearity)
 
-        self.loss_fn = CrossEntropyLoss()
+        if config.loss_fn  == "cross_entropy_loss":
+            self.loss_fn = CrossEntropyLoss(label_smoothing=0.1)
+        elif config.loss_fn == "MSE":
+            self.loss_fn = MSELoss()
         
     def eval(self):
         self.apply_dropout = False
@@ -111,10 +115,11 @@ class Trainer:
             n_classes=n_classes,
             in_dim=flattened_dim,
             hidden_layer_size=args.hidden_size,
-            layer_dims=args.hidden_size_list,
+            layer_dims=args.layer_dims,
             weight_init=args.weight_init,
-            batch_norm=False,
+            batch_norm=args.batch_norm,
             dropout_p=args.dropout_p,
+            loss_fn=args.loss_fn
         )
         self.model = NN(self.model_config)
         self.optimizer = self.get_optimizer()
@@ -133,6 +138,8 @@ class Trainer:
             return Adam(params=self.model.parameters(), lr=self.args.learning_rate, betas=(self.args.beta1, self.args.beta2), eps=self.args.epsilon, weight_decay=self.args.weight_decay)
         elif self.args.optimizer == "nadam":
             return NAdam(params=self.model.parameters(), lr=self.args.learning_rate, betas=(self.args.beta1, self.args.beta2), eps=self.args.epsilon, weight_decay=self.args.weight_decay)
+        elif self.args.optimizer == "adamw":
+            return AdamW(params=self.model.parameters(), lr=self.args.learning_rate, betas=(self.args.beta1, self.args.beta2), eps=self.args.epsilon, weight_decay=self.args.weight_decay)
         else:
             raise ValueError(f"Ugghh, unsupported optimizer: {self.args.optimizer}")
 
@@ -157,11 +164,9 @@ class Trainer:
             print("Starting Epoch : ", epoch+1)
             total_loss, total_acc = 0, 0
             for i, (batch_data, batch_labels) in enumerate(self.train_loader):
-                loss, acc, _ = self.model.forward(batch_data, batch_labels, training=True)
-
                 self.optimizer.zero_grad()
+                loss, acc, _ = self.model.forward(batch_data, batch_labels, training=True)
                 loss.backward()
-                
                 
                 if self.max_grad_norm!=0.0:
                     self.apply_grad_norm()

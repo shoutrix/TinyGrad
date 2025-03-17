@@ -22,6 +22,7 @@ class TrainerConfig:
     activation: str = "ReLU"
     max_grad_norm: float = 0.0
     hidden_size_list: list = None
+    dropout_p:float = 0.1
 
 def main():
     wandb.init()
@@ -38,6 +39,7 @@ def main():
         num_layers=wandb.config.num_layers,
         hidden_size=wandb.config.hidden_size,
         activation=wandb.config.activation,
+        dropout_p=0.1,
     )
 
     trainer = Trainer(config, logging=True)
@@ -50,17 +52,17 @@ if __name__ == "__main__":
         "name": "sweep_trial01",
         "metric": {"goal": "maximize", "name": "val_accuracy"},
         "parameters": {
-            "epochs": {"values": [10]},
-            "num_layers": {"values": [4]},
-            "hidden_size": {"values": [256]},
-            "weight_decay": {"values": [0.0001]},
+            "epochs": {"values": [15]},
+            "num_layers": {"values": [3,4,5]},
+            "hidden_size": {"values": [256, 128]},
+            "weight_decay": {"values": [0.0001, 0.0005, 0]},
             "learning_rate": {"values": [1e-2, 1e-3, 1e-4]},
-            "optimizer": {"values": ["adam"]},
+            "optimizer": {"values": ["adam", "nadam", "sgd", "momentum", "nag", "rmsprop"]},
             "batch_size": {"values": [64]},
-            "weight_init": {"values": ["kaiming"]},
-            "activation": {"values": ["ReLU"]},
+            "weight_init": {"values": ["kaiming", "Xavier", "random"]},
+            "activation": {"values": ["ReLU", "tanh", "sigmoid"]},
         },
     }
 
-    sweep_id = wandb.sweep(sweep=sweep_configuration, project="sweep_trial02", entity="shoutrik")
-    wandb.agent(sweep_id, function=main, count=5)
+    sweep_id = wandb.sweep(sweep=sweep_configuration, project="Tinygrad_sweep_trial02", entity="shoutrik")
+    wandb.agent(sweep_id, function=main, count=100)
