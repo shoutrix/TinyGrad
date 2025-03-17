@@ -62,6 +62,7 @@ class NN:
         elif config.loss_fn == "mean_squared_error":
             self.loss_fn = MSELoss()
         
+        
     def eval(self):
         self.apply_dropout = False
  
