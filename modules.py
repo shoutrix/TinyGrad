@@ -15,6 +15,16 @@ def add_nonlinearity(name):
 
 class init:
     @staticmethod
+    def calculate_gain(nonlinearity):
+        if nonlinearity == "tanh":
+            gain = 5.0 / 3
+        elif nonlinearity == "relu":
+            gain = np.sqrt(2.0)
+        else:
+            gain = 1
+        return gain
+    
+    @staticmethod
     def random_(tensor):
         tensor.data[:] = np.random.randn(*tensor.data.shape)
         
@@ -29,46 +39,35 @@ class init:
     @staticmethod
     def kaiming_uniform_(tensor, mode, nonlinearity):
         print("Initializing weights with kaiming uniform")
-        if nonlinearity == "tanh":
-            gain = 5.0 / 3
-        elif nonlinearity == "relu":
-            gain = np.sqrt(2.0)
-        else:
-            gain = 1
+        gain = init.calculate_gain(nonlinearity)
         bound = np.sqrt(3 / mode) * gain
-        print(f"Initializing weights from a uniform dist with bound : {-bound}, {bound}")
+        print(f"Initializing weights from a uniform distribution with bound : {-bound}, {bound}")
         tensor.data[:] = np.random.uniform(-bound, bound, tensor.data.shape)
 
     @staticmethod
-    def xavier_uniform_(tensor):
-        print("Initializing weights with xavier uniform")
-        fan_in, fan_out = tensor.data.shape
-        bound = np.sqrt(6 / (fan_in + fan_out))
-        print(f"Initializing weights from a uniform dist with bound : {-bound}, {bound}")
-        tensor.data[:] = np.random.uniform(-bound, bound, tensor.data.shape)
-
-
-    @staticmethod
-    def He_(tensor):
-        fan_in, fan_out = tensor.data.shape
-        print("Initializing weights with He normal")
-        bound = 2/fan_in
-        print(f"Initializing weights from a normal dist with std : {bound}, and mean : 0.0")
-        tensor.data[:] = np.random.normal(loc=0.0, scale=bound, size=tensor.data.shape)
-
-    @staticmethod
-    def kaiming_normal_(tensor, mode):
+    def kaiming_normal_(tensor, mode, nonlinearity):
         print("Initializing weights with kaiming normal")
-        bound = np.sqrt(6 / mode)
-        print(f"Initializing weights from a uniform dist with bound : {-bound}, {bound}")
+        gain = init.calculate_gain(nonlinearity)
+        bound = gain / np.sqrt(mode)
+        print(f"Initializing weights from a normal distribution with mean : 0.0, std : {bound}")
         tensor.data[:] = np.random.normal(loc=0.0, scale=bound, size=tensor.data.shape)
 
     @staticmethod
-    def xavier_normal_(tensor):
-        print("Initializing weights with xavier normal")
+    def xavier_uniform_(tensor, nonlinearity):
+        print("Initializing weights with xavier uniform")
+        gain = init.calculate_gain(nonlinearity)
         fan_in, fan_out = tensor.data.shape
-        bound = np.sqrt(6 / (fan_in + fan_out))
-        print(f"Initializing weights from a uniform dist with bound : {-bound}, {bound}")
+        bound = gain * np.sqrt(6 / (fan_in + fan_out))
+        print(f"Initializing weights from a uniform distribution with bound : {-bound}, {bound}")
+        tensor.data[:] = np.random.uniform(-bound, bound, tensor.data.shape)
+
+    @staticmethod
+    def xavier_normal_(tensor, nonlinearity):
+        print("Initializing weights with xavier normal")
+        gain = init.calculate_gain(nonlinearity)
+        fan_in, fan_out = tensor.data.shape
+        bound = gain * np.sqrt(2 / (fan_in + fan_out))
+        print(f"Initializing weights from a normal distribution with mean : 0.0, std : {bound}")
         tensor.data[:] = np.random.normal(loc=0.0, scale=bound, size=tensor.data.shape)
 
 
@@ -86,17 +85,17 @@ class Linear:
         if self.weight_init == "random":
             init.random_(self.weight)
         elif self.weight_init == "Xavier":
-            init.xavier_uniform_(self.weight)
+            init.xavier_uniform_(self.weight, nonlinearity=self.nonlinearity)
         elif self.weight_init == "kaiming":
-            init.kaiming_uniform_(self.weight, mode=self.fan_out, nonlinearity=self.nonlinearity)
+            init.kaiming_uniform_(self.weight, mode=self.fan_in, nonlinearity=self.nonlinearity)
             
         # Not used
         elif self.weight_init == "He":
             init.He_(self.weight)
         elif self.weight_init == "Xavier_normal":
-            init.xavier_normal_(self.weight)
+            init.xavier_normal_(self.weight, nonlinearity=self.nonlinearity)
         elif self.weight_init == "kaiming_normal":
-            init.kaiming_normal_(self.weight, mode=self.fan_out)
+            init.kaiming_normal_(self.weight, mode=self.fan_in, nonlinearity=self.nonlinearity)
         init.zeros_(self.bias)
 
     def __call__(self, x, training):
@@ -174,41 +173,60 @@ class Tanh:
 
 class MSELoss:
     @staticmethod
-    def __call__(self, pred, target):
-        batch_size = pred.shape[0]
-        diff_ = (pred - target) ** 2
-        loss = diff_.sum() / batch_size
+    def __call__(pred, target):
+        one_hot_ = np.zeros_like(pred.data)
+        B = one_hot_.shape[0]
+        
+        one_hot_[np.arange(B), target.data] = 1
+        one_hot_ = Tensor(one_hot_)
+        
+        diff_ = (pred - one_hot_) ** 2
+        loss = diff_.sum() / B
         return loss
             
 class CrossEntropyLossBackward(BaseBackward):
     def __call__(self, upstream_grad):
-        
-        
         pred = self.sources[0]
         target = self.sources[1]   
         prob = self.sources[2]   
+        label_smoothing = self.sources[3]
 
-        scaled_upstream_grad = upstream_grad / pred.shape[0]
+        n_classes = pred.shape[-1]
+        batch_size = pred.shape[0]
 
-        pred_grad = prob.copy()
-        pred_grad[np.arange(pred.shape[0]), target.data] -= 1
+        scaled_upstream_grad = upstream_grad / batch_size
+
+        one_hot_target = np.zeros_like(prob)
+        one_hot_target[np.arange(batch_size), target.data] = 1.0
+        one_hot_target = one_hot_target * (1 - label_smoothing) + label_smoothing / n_classes
+
+        pred_grad = prob - one_hot_target
+
         pred.grad += pred_grad * scaled_upstream_grad
 
+
 class CrossEntropyLoss:
-    @staticmethod
-    def __call__(pred, target):  
+    
+    def __init__(self, label_smoothing=0.0):
+        self.label_smoothing = label_smoothing
 
-        # print(pred)    
-        exp_ = np.exp(pred.data)
-        # print("exp : ", exp_)
-        prob = exp_ / (exp_.sum(axis=1, keepdims=True) + 1e-8)
+    def __call__(self, pred, target):  
+        exp_ = np.exp(pred.data - np.max(pred.data, axis=1, keepdims=True))
+        prob = exp_ / (exp_.sum(axis=1, keepdims=True) + 1e-8)  
+
+        n_classes = pred.data.shape[-1]
         
-        prob_filtered = prob[np.arange(target.shape[0]), target.data]
-        mean_neg_log_likelihood = -np.log(prob_filtered).mean()
+        one_hot_target = np.zeros_like(prob)
+        one_hot_target[np.arange(target.shape[0]), target.data] = 1.0
 
-        loss = Tensor(mean_neg_log_likelihood, requires_grad=True, name="loss")
+        if self.label_smoothing > 0.0:
+            one_hot_target = one_hot_target * (1 - self.label_smoothing) + self.label_smoothing / n_classes
+        
+        loss_value = -np.sum(one_hot_target * np.log(prob + 1e-8), axis=1).mean()
+        
+        loss = Tensor(loss_value, requires_grad=True, name="loss")
         loss._prev = {pred}
-        loss._grad_fn = CrossEntropyLossBackward(pred, target, prob)
+        loss._grad_fn = CrossEntropyLossBackward(pred, target, prob, self.label_smoothing)
         return loss
 
 
@@ -250,7 +268,7 @@ class BatchNormBackward(BaseBackward):
         gamma = self.sources[4]
         beta = self.sources[5]
         epsilon = self.sources[6]
-                
+
         m = upstream_grad.shape[0]
 
         dL_dbeta = np.sum(upstream_grad, axis=0)
@@ -264,34 +282,19 @@ class BatchNormBackward(BaseBackward):
         beta.grad += dL_dbeta
         x.grad += dL_dx
         
-
-# def batchnorm_backward(dout, cache):
-
-# 	N, D = dout.shape
-# 	x_mu, inv_var, x_hat, gamma = cache
-
-# 	# intermediate partial derivatives
-# 	dxhat = dout * gamma
-
-# 	# final partial derivatives
-# 	dx = (1. / N) * inv_var * (N*dxhat - np.sum(dxhat, axis=0)
-# 		- x_hat*np.sum(dxhat*x_hat, axis=0))
-# 	dbeta = np.sum(dout, axis=0)
-# 	dgamma = np.sum(x_hat*dout, axis=0)
-
-# 	return dx, dgamma, dbeta
-        
         
 
 
 class BatchNorm:
-    def __init__(self, num_features, epsilon=1e-8, momentum=0.9):
+    def __init__(self, num_features, epsilon=1e-8, momentum=0.1):
         self.epsilon = epsilon
         self.momentum = momentum
-        self.gamma = Tensor(np.ones(num_features))
-        self.beta = Tensor(np.zeros(num_features))
+        self.gamma = Tensor(np.ones(num_features), requires_grad=True)
+        self.beta = Tensor(np.zeros(num_features), requires_grad=True)
         self.running_mean = np.zeros(num_features)
         self.running_var = np.zeros(num_features)
+        
+        print("Adding BatchNorm")
 
     def __call__(self, x, training=True):
         x_data = x.data
@@ -314,12 +317,23 @@ class BatchNorm:
             out._grad_fn = BatchNormBackward(x, x_norm, mean, var, self.gamma, self.beta, self.epsilon)
             return out
             
-        else:
             
+            # mean_ = x.mean(axis=0, keepdims=True)
+            # var_ = ((x - mean_)**2).sum(axis=0, keepdims=True) / (x.shape[0] - 1)
+            # x_norm = (x - mean_) / (var_ + 1e-10)**0.5
+
+            # out = self.gamma * x_norm + self.beta
+            
+            # self.running_mean = self.momentum * self.running_mean + (1 - self.momentum) * mean_
+            # self.running_var = self.momentum * self.running_var + (1 - self.momentum) * var_
+            
+            # return out
+            
+            
+        else:
             # print(type(x_data), type(self.running_mean), type(self.running_var), type(self.epsilon))
             x_norm = (x_data - self.running_mean) / np.sqrt(self.running_var + self.epsilon)
             out = self.gamma.data * x_norm + self.beta.data
-            
             out = Tensor(out)
             return out
 
