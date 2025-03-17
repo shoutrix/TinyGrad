@@ -2,6 +2,7 @@ import numpy as np
 from tensorflow.keras.datasets import fashion_mnist, mnist
 from tensor import Tensor
 import random
+import torch
 
 
 def load_data(name):
@@ -50,6 +51,7 @@ def load_data(name):
     x_valid, y_valid = x_train[:n_valid_samples], y_train[:n_valid_samples]
     x_train, y_train = x_train[n_valid_samples:], y_train[n_valid_samples:]
 
+
     trainset = FashionMnistDataset(x_train, y_train)
     validset = FashionMnistDataset(x_valid, y_valid)
     evalset = FashionMnistDataset(x_test, y_test)
@@ -94,6 +96,13 @@ class FashionMnistDataloader:
         self.batches = np.array_split(self.dataset.indices, N_batches)
         print(f"Initialized dataloader with {len(self.batches)} batches")
         return self
+    
+    def normalize(self, x):
+        x = (x - np.mean(x, axis=0, keepdims=True))/(np.std(x, axis=0, keepdims=True) + 1e-10)
+        x_min = np.min(x, axis=0, keepdims=True)
+        x_max = np.max(x, axis=0, keepdims=True)
+        x = ((x-x_min)/(x_max-x_min + 1e-10) * 2) - 1
+        return x
 
     def __next__(self):
         if self.current_batch >= len(self.batches):
@@ -101,7 +110,6 @@ class FashionMnistDataloader:
     
         batch_indices = self.batches[self.current_batch]
         x, y = self.dataset.data[batch_indices], self.dataset.labels[batch_indices]  
-        x = (x - np.mean(x, axis=0, keepdims=True))/(np.std(x, axis=0, keepdims=True) + 1e-10)
-        # x = x/x.max()
+        x = self.normalize(x)
         self.current_batch += 1   
         return Tensor(x).float(), Tensor(y).long()
