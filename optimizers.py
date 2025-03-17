@@ -145,3 +145,41 @@ class NAdam:
         for param in self.params:
             if param.grad is not None:
                 param.grad.fill(0)
+                
+
+class AdamW:
+    def __init__(self, params, lr=0.001, betas=(0.9, 0.999), eps=1e-8, weight_decay=0):
+        self.params = params.values()
+        self.lr = lr
+        self.eps = eps
+        self.weight_decay = weight_decay
+        self.beta1, self.beta2 = betas
+        self.first_moment = {id(param): np.zeros_like(param.data) for param in self.params}
+        self.second_moment = {id(param): np.zeros_like(param.data) for param in self.params}
+        self.t = 0
+        
+        print("ADAMW : ", self.lr, self.eps, self.weight_decay, self.beta1, self.beta2)
+
+    def step(self):
+        self.t += 1
+
+        for param in self.params:
+            if param.grad is not None and param.requires_grad:
+                if self.weight_decay != 0:
+                    param.data -= self.lr * self.weight_decay * param.data
+                
+                self.first_moment[id(param)] = self.beta1 * self.first_moment[id(param)] + (1 - self.beta1) * param.grad
+                m = self.first_moment[id(param)]
+
+                self.second_moment[id(param)] = self.beta2 * self.second_moment[id(param)] + (1 - self.beta2) * np.power(param.grad, 2)
+                v = self.second_moment[id(param)]
+
+                m_hat = m / (1 - self.beta1 ** self.t)
+                v_hat = v / (1 - self.beta2 ** self.t)
+
+                param.data -= self.lr * (m_hat / (np.sqrt(v_hat) + self.eps))
+                
+    def zero_grad(self):
+        for param in self.params:
+            if param.grad is not None:
+                param.grad.fill(0)
