@@ -2,7 +2,6 @@ import numpy as np
 from tensorflow.keras.datasets import fashion_mnist, mnist
 from tensor import Tensor
 import random
-import torch
 
 
 def load_data(name):
