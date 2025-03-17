@@ -282,8 +282,6 @@ class BatchNormBackward(BaseBackward):
         beta.grad += dL_dbeta
         x.grad += dL_dx
         
-        
-
 
 class BatchNorm:
     def __init__(self, num_features, epsilon=1e-8, momentum=0.1):
@@ -294,7 +292,7 @@ class BatchNorm:
         self.running_mean = np.zeros(num_features)
         self.running_var = np.zeros(num_features)
         
-        print("Adding BatchNorm")
+        print("Adding BatchNorm. Yay !!!")
 
     def __call__(self, x, training=True):
         x_data = x.data
